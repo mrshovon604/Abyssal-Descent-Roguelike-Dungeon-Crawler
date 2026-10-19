@@ -16,6 +16,7 @@ interface InventoryModalProps {
   onUnequipItem: (slot: keyof Equipment) => void;
   onUseItem: (item: Item) => void;
   onDropItem: (item: Item) => void;
+  onSellItem?: (item: Item) => void;
 }
 
 export const InventoryModal: React.FC<InventoryModalProps> = ({
@@ -25,6 +26,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
   onUnequipItem,
   onUseItem,
   onDropItem,
+  onSellItem,
 }) => {
   const [selectedItem, setSelectedItem] = useState<Item | null>(player.inventory[0] || null);
   const [mobileTab, setMobileTab] = useState<'backpack' | 'equipment' | 'inspect'>('backpack');
@@ -469,6 +471,16 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
                     {selectedItem.manaAmount && (
                       <div className="text-sky-400 font-bold">Restores +{selectedItem.manaAmount} MP</div>
                     )}
+                    {selectedItem.permanentAttackBonus && (
+                      <div className="text-amber-300 font-bold">
+                        ⭐ Permanent +{selectedItem.permanentAttackBonus} Base Attack
+                      </div>
+                    )}
+                    {selectedItem.permanentMaxHpBonus && (
+                      <div className="text-emerald-300 font-bold">
+                        ⭐ Permanent +{selectedItem.permanentMaxHpBonus} Max HP
+                      </div>
+                    )}
                   </div>
 
                   {/* Comparison with equipped */}
@@ -529,6 +541,20 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
                       className="min-h-[48px] w-full py-3 bg-amber-500 hover:bg-amber-400 active:bg-amber-600 active:scale-95 text-stone-950 font-bold font-cinzel rounded-xl text-sm uppercase tracking-wider transition-all cursor-pointer shadow-lg"
                     >
                       Equip Relic
+                    </button>
+                  )}
+
+                  {onSellItem && player.inventory.some((i) => i.id === selectedItem.id) && (
+                    <button
+                      onClick={() => {
+                        soundEngine.haptic(20);
+                        onSellItem(selectedItem);
+                        setSelectedItem(null);
+                        setMobileTab('backpack');
+                      }}
+                      className="min-h-[40px] w-full py-2 bg-stone-900 hover:bg-amber-950/60 active:bg-amber-900 border border-amber-700/50 text-amber-300 rounded-xl text-xs font-mono-stat font-bold transition-colors cursor-pointer"
+                    >
+                      🪙 Salvage for +{Math.max(5, Math.round(selectedItem.goldValue * 0.5))} Gold
                     </button>
                   )}
 

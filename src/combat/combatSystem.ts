@@ -4,8 +4,7 @@
  */
 
 import { soundEngine } from '../audio/soundEngine';
-import { SKILL_TREE_NODES } from '../skills/skillTreeData';
-import { CombatLogEntry, DungeonFloor, Enemy, FloatingText, Item, Particle, Player, PlayerStats } from '../types/game';
+import { CombatLogEntry, DungeonFloor, Enemy, Item, Player, PlayerStats } from '../types/game';
 import { getNextStepTowards } from '../dungeon/dungeonGenerator';
 
 export function computeTotalPlayerStats(player: Player): PlayerStats {
@@ -88,6 +87,7 @@ export interface AttackResult {
   isCrit: boolean;
   killed: boolean;
   leechAmount: number;
+  triggeredBossPhase2?: boolean;
 }
 
 export function executePlayerAttack(
@@ -95,7 +95,9 @@ export function executePlayerAttack(
   enemy: Enemy,
   addFloatingText: (text: string, x: number, y: number, color: string) => void,
   logCombat: (text: string, type: CombatLogEntry['type']) => void,
-  spawnParticles: (x: number, y: number, color: string, count: number) => void
+  spawnParticles: (x: number, y: number, color: string, count: number) => void,
+  floor?: DungeonFloor,
+  spawnSlash?: (x: number, y: number, angle: number, color: string) => void
 ): AttackResult {
   const stats = computeTotalPlayerStats(player);
   soundEngine.playAttack();
@@ -108,7 +110,16 @@ export function executePlayerAttack(
 
   enemy.hp -= damage;
   soundEngine.playHit(isCrit);
-  spawnParticles(enemy.x, enemy.y, isCrit ? '#f59e0b' : '#ef4444', isCrit ? 14 : 7);
+  spawnParticles(enemy.x, enemy.y, isCrit ? '#f59e0b' : '#ef4444', isCrit ? 14 : 8);
+
+  if (spawnSlash) {
+    const angle = Math.atan2(enemy.y - player.y, enemy.x - player.x);
+    spawnSlash(enemy.x, enemy.y, angle, isCrit ? '#fbbf24' : '#f8fafc');
+  }
+
+  if (floor && floor.tiles[enemy.y]?.[enemy.x]) {
+    floor.tiles[enemy.y][enemy.x].decal = 'blood';
+  }
 
   addFloatingText(
     isCrit ? `💥 ${damage} CRIT!` : `-${damage}`,
@@ -136,13 +147,25 @@ export function executePlayerAttack(
     'player_attack'
   );
 
+  let triggeredBossPhase2 = false;
+  if (enemy.isBoss && enemy.hp > 0 && enemy.hp <= enemy.maxHp * 0.5 && enemy.phase !== 2) {
+    enemy.phase = 2;
+    enemy.attack = Math.round(enemy.attack * 1.25);
+    triggeredBossPhase2 = true;
+    soundEngine.playSpell('fire');
+    soundEngine.haptic(50);
+    spawnParticles(enemy.x, enemy.y, '#f43f5e', 22);
+    addFloatingText('🔥 PHASE II: ENRAGED!', enemy.x, enemy.y - 0.8, '#f43f5e');
+    logCombat(`🔥 ${enemy.name} enters PHASE II ENRAGE! Attack power surged by +25%!`, 'danger');
+  }
+
   const killed = enemy.hp <= 0;
   if (killed) {
     soundEngine.playKill();
     logCombat(`💀 You defeated ${enemy.name}! Gained ${enemy.xpReward} XP.`, 'level_up');
   }
 
-  return { damage, isCrit, killed, leechAmount };
+  return { damage, isCrit, killed, leechAmount, triggeredBossPhase2 };
 }
 
 export function executeEnemyTurns(
@@ -151,7 +174,16 @@ export function executeEnemyTurns(
   turnNumber: number,
   addFloatingText: (text: string, x: number, y: number, color: string) => void,
   logCombat: (text: string, type: CombatLogEntry['type']) => void,
-  spawnParticles: (x: number, y: number, color: string, count: number) => void
+  spawnParticles: (x: number, y: number, color: string, count: number) => void,
+  spawnSlash?: (x: number, y: number, angle: number, color: string) => void,
+  spawnProjectile?: (
+    sx: number,
+    sy: number,
+    tx: number,
+    ty: number,
+    color: string,
+    type: 'firebolt' | 'frost_ring' | 'meteor' | 'shadow_trail' | 'arrow'
+  ) => void
 ) {
   const pStats = computeTotalPlayerStats(player);
   const isInvisible = player.statusEffects.some(s => s.type === 'invisibility');
@@ -185,6 +217,32 @@ export function executeEnemyTurns(
       return;
     }
 
+    // Check if enemy had an AoE Slam queued from previous turn
+    if (enemy.intent?.type === 'aoe_slam' && enemy.intent.aoeTiles) {
+      const aoeTiles = enemy.intent.aoeTiles;
+      soundEngine.playHit(true);
+      aoeTiles.forEach(t => {
+        if (floor.tiles[t.y]?.[t.x]) {
+          floor.tiles[t.y][t.x].decal = 'scorch';
+        }
+        spawnParticles(t.x, t.y, '#f43f5e', 5);
+      });
+
+      const hitPlayer = aoeTiles.some(t => t.x === player.x && t.y === player.y);
+      if (hitPlayer) {
+        const slamDmg = Math.max(4, Math.round(enemy.intent.value - pStats.defense));
+        player.stats.hp -= slamDmg;
+        soundEngine.playPlayerHurt();
+        addFloatingText(`💥 SLAM -${slamDmg}`, player.x, player.y - 0.5, '#f43f5e');
+        logCombat(`💥 ${enemy.name}'s Cataclysmic Slam crushed you for ${slamDmg} damage!`, 'enemy_attack');
+      } else {
+        addFloatingText('💨 DODGED SLAM!', player.x, player.y - 0.4, '#38bdf8');
+        logCombat(`You stepped clear of ${enemy.name}'s Cataclysmic Slam!`, 'player_attack');
+      }
+      enemy.intent = null;
+      return;
+    }
+
     const dist = Math.abs(enemy.x - player.x) + Math.abs(enemy.y - player.y);
 
     // If player is invisible or out of aggro range (10 tiles), don't hunt
@@ -193,16 +251,45 @@ export function executeEnemyTurns(
       return;
     }
 
+    // Boss Phase 2 Special AoE Slam Windup (every 3 turns when near player)
+    if (enemy.isBoss && enemy.phase === 2 && dist <= 3 && enemy.turnsAlive % 3 === 0) {
+      const aoeTiles: { x: number; y: number }[] = [];
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const tx = player.x + dx;
+          const ty = player.y + dy;
+          if (tx >= 0 && tx < floor.width && ty >= 0 && ty < floor.height && floor.tiles[ty][tx].type !== 'wall') {
+            aoeTiles.push({ x: tx, y: ty });
+          }
+        }
+      }
+      enemy.intent = {
+        type: 'aoe_slam',
+        value: Math.round(enemy.attack * 1.35),
+        aoeTiles,
+        description: 'Channeling 3x3 Abyssal Slam!',
+      };
+      addFloatingText('⚠️ CHANNELING SLAM!', enemy.x, enemy.y - 0.6, '#f43f5e');
+      logCombat(`⚠️ ${enemy.name} raises its weapon to unleash a 3x3 Abyssal Slam! Move out of the red zone!`, 'danger');
+      return;
+    }
+
     // Ranged Archer logic
     if (enemy.archetype === 'archer' && dist <= 4 && dist >= 2) {
-      // Archer shoots
-      handleEnemyAttack(enemy, player, pStats, addFloatingText, logCombat, spawnParticles, true);
+      if (spawnProjectile) {
+        spawnProjectile(enemy.x, enemy.y, player.x, player.y, '#cbd5e1', 'arrow');
+      }
+      handleEnemyAttack(floor, enemy, player, pStats, addFloatingText, logCombat, spawnParticles, true);
       return;
     }
 
     // Melee attack if adjacent
     if (dist === 1) {
-      handleEnemyAttack(enemy, player, pStats, addFloatingText, logCombat, spawnParticles, false);
+      if (spawnSlash) {
+        const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+        spawnSlash(player.x, player.y, angle, '#ef4444');
+      }
+      handleEnemyAttack(floor, enemy, player, pStats, addFloatingText, logCombat, spawnParticles, false);
       return;
     }
 
@@ -237,6 +324,7 @@ export function executeEnemyTurns(
 }
 
 function handleEnemyAttack(
+  floor: DungeonFloor,
   enemy: Enemy,
   player: Player,
   pStats: PlayerStats,
@@ -272,6 +360,9 @@ function handleEnemyAttack(
   player.stats.hp -= rawDmg;
   soundEngine.playPlayerHurt();
   spawnParticles(player.x, player.y, '#ef4444', 8);
+  if (floor.tiles[player.y]?.[player.x]) {
+    floor.tiles[player.y][player.x].decal = 'blood';
+  }
 
   addFloatingText(`-${rawDmg}`, player.x, player.y - 0.3, '#f87171');
   logCombat(

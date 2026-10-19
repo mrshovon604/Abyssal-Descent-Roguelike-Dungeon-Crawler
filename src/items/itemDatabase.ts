@@ -119,8 +119,8 @@ export function generateRandomItem(floorNumber: number, forcedRarity?: Rarity): 
 
   // Base stat calculations with floor scaling & rarity multiplier
   const floorScale = 1 + (floorNumber - 1) * 0.22;
-  const attack = base.baseAttack ? Math.round(base.baseAttack * cfg.multiplier * floorScale) : undefined;
-  const defense = base.baseDefense ? Math.round(base.baseDefense * cfg.multiplier * floorScale) : undefined;
+  let attack = base.baseAttack ? Math.round(base.baseAttack * cfg.multiplier * floorScale) : undefined;
+  let defense = base.baseDefense ? Math.round(base.baseDefense * cfg.multiplier * floorScale) : undefined;
   let hpBonus = base.baseHpBonus ? Math.round(base.baseHpBonus * cfg.multiplier * floorScale) : undefined;
   let manaBonus = base.baseManaBonus ? Math.round(base.baseManaBonus * cfg.multiplier * floorScale) : undefined;
   let critChance = (rarity === 'epic' || rarity === 'legendary' || rarity === 'mythic') ? 0.05 : 0;
@@ -132,8 +132,8 @@ export function generateRandomItem(floorNumber: number, forcedRarity?: Rarity): 
   if (rarity !== 'common') {
     const prefix = PREFIXES[Math.floor(Math.random() * PREFIXES.length)];
     fullName = `${prefix.name} ${fullName}`;
-    if (prefix.attackBonus && attack !== undefined) attack + Math.round(prefix.attackBonus * floorScale);
-    if (prefix.defenseBonus && defense !== undefined) defense + Math.round(prefix.defenseBonus * floorScale);
+    if (prefix.attackBonus && attack !== undefined) attack += Math.round(prefix.attackBonus * floorScale);
+    if (prefix.defenseBonus && defense !== undefined) defense += Math.round(prefix.defenseBonus * floorScale);
     if (prefix.hpBonus) hpBonus = (hpBonus || 0) + Math.round(prefix.hpBonus * floorScale);
     if (prefix.manaBonus) manaBonus = (manaBonus || 0) + Math.round(prefix.manaBonus * floorScale);
     if (prefix.critChance) critChance += prefix.critChance;
@@ -145,15 +145,15 @@ export function generateRandomItem(floorNumber: number, forcedRarity?: Rarity): 
     const suffix = SUFFIXES[Math.floor(Math.random() * SUFFIXES.length)];
     fullName = `${fullName} ${suffix.name}`;
     if (suffix.critChance) critChance += suffix.critChance;
-    if (suffix.attackBonus && attack !== undefined) attack + Math.round(suffix.attackBonus * floorScale);
-    if (suffix.defenseBonus && defense !== undefined) defense + Math.round(suffix.defenseBonus * floorScale);
+    if (suffix.attackBonus && attack !== undefined) attack += Math.round(suffix.attackBonus * floorScale);
+    if (suffix.defenseBonus && defense !== undefined) defense += Math.round(suffix.defenseBonus * floorScale);
     if (suffix.hpBonus) hpBonus = (hpBonus || 0) + Math.round(suffix.hpBonus * floorScale);
     if (suffix.manaBonus) manaBonus = (manaBonus || 0) + Math.round(suffix.manaBonus * floorScale);
     if (suffix.lifeSteal) lifeSteal += suffix.lifeSteal;
     if (suffix.dodgeChance) dodgeChance += suffix.dodgeChance;
   }
 
-  const goldValue = Math.round((15 + floorNumber * 10) * cfg.multiplier);
+  const goldValue = Math.round((18 + floorNumber * 12) * cfg.multiplier);
 
   return {
     id: `item_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -173,6 +173,50 @@ export function generateRandomItem(floorNumber: number, forcedRarity?: Rarity): 
     dodgeChance: dodgeChance > 0 ? parseFloat(dodgeChance.toFixed(2)) : undefined,
     goldValue,
   };
+}
+
+export function generateMerchantStock(floorNumber: number): Item[] {
+  const stock: Item[] = [];
+  // 1. Rare or Epic equipment
+  const r1: Rarity = floorNumber >= 5 ? 'epic' : 'rare';
+  stock.push(generateRandomItem(floorNumber, r1));
+  // 2. Uncommon/Rare/Legendary equipment
+  const r2: Rarity = Math.random() > 0.65 ? 'legendary' : 'rare';
+  stock.push(generateRandomItem(floorNumber, r2));
+  // 3. Health Potion
+  const heal = Math.round(45 + floorNumber * 14);
+  stock.push({
+    id: `shop_hp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    name: floorNumber >= 5 ? 'Royal Crimson Draught' : 'Crimson Health Draught',
+    type: 'potion',
+    rarity: 'uncommon',
+    description: `Restores ${heal} Health instantly.`,
+    icon: '🧪',
+    level: floorNumber,
+    healAmount: heal,
+    goldValue: 22 + floorNumber * 6,
+  });
+  // 4. Mana Potion or Hellfire Scroll
+  stock.push(generateConsumable(floorNumber));
+  // 5. Special Permanent Elixir of Might / Vitality
+  const isMight = Math.random() > 0.5;
+  stock.push({
+    id: `shop_elixir_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    name: isMight ? 'Elixir of Titan Might' : 'Elixir of Eternal Vigor',
+    type: 'potion',
+    rarity: 'epic',
+    description: isMight
+      ? 'Permanently increases Base Attack by +3 and restores 25 HP.'
+      : 'Permanently increases Max Health by +25 and heals 40 HP.',
+    icon: isMight ? '🍷' : '🍯',
+    level: floorNumber,
+    healAmount: isMight ? 25 : 40,
+    permanentAttackBonus: isMight ? 3 : undefined,
+    permanentMaxHpBonus: isMight ? undefined : 25,
+    goldValue: 65 + floorNumber * 14,
+  });
+
+  return stock;
 }
 
 export function generateConsumable(floorNumber: number): Item {

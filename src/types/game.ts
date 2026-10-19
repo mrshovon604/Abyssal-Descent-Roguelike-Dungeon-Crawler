@@ -30,6 +30,8 @@ export interface Item {
   // Consumable effects
   healAmount?: number;
   manaAmount?: number;
+  permanentAttackBonus?: number;
+  permanentMaxHpBonus?: number;
   scrollEffect?: 'teleport' | 'cleansing' | 'fireball' | 'identify';
   goldValue: number;
 }
@@ -120,9 +122,10 @@ export type MonsterArchetype =
   | 'boss';
 
 export interface EnemyIntent {
-  type: 'attack' | 'ranged_attack' | 'charge' | 'buff' | 'summon' | 'flee';
+  type: 'attack' | 'ranged_attack' | 'aoe_slam' | 'charge' | 'buff' | 'summon' | 'flee';
   targetX?: number;
   targetY?: number;
+  aoeTiles?: { x: number; y: number }[];
   value: number;
   description: string;
 }
@@ -141,6 +144,7 @@ export interface Enemy {
   color: string;
   symbol: string;
   isBoss: boolean;
+  phase?: 1 | 2;
   intent: EnemyIntent | null;
   statusEffects: ActiveStatusEffect[];
   turnsAlive: number;
@@ -157,6 +161,7 @@ export type TileType =
   | 'chest_opened' 
   | 'shrine' 
   | 'shrine_used' 
+  | 'merchant'
   | 'trap_spike' 
   | 'trap_poison' 
   | 'chasm';
@@ -180,6 +185,14 @@ export interface TrapData {
   triggered: boolean;
 }
 
+export interface MerchantData {
+  name: string;
+  stock: Item[];
+  visited: boolean;
+}
+
+export type TileDecal = 'blood' | 'scorch' | 'moss' | 'bones' | 'cracks';
+
 export interface Tile {
   x: number;
   y: number;
@@ -189,6 +202,9 @@ export interface Tile {
   shrine?: ShrineData;
   chest?: ChestData;
   trap?: TrapData;
+  merchant?: MerchantData;
+  decal?: TileDecal;
+  hasTorch?: boolean;
 }
 
 export interface Room {
@@ -200,6 +216,16 @@ export interface Room {
   centerY: number;
 }
 
+export type FloorEventType = 'none' | 'blood_moon' | 'gilded_vault' | 'arcane_surge' | 'cursed_mist';
+
+export interface FloorEvent {
+  type: FloorEventType;
+  name: string;
+  description: string;
+  icon: string;
+  color: string;
+}
+
 export interface DungeonFloor {
   floorNumber: number;
   width: number;
@@ -209,7 +235,9 @@ export interface DungeonFloor {
   enemies: Enemy[];
   stairsDownPos: { x: number; y: number };
   stairsUpPos: { x: number; y: number };
+  merchantPos?: { x: number; y: number };
   theme: DungeonTheme;
+  floorEvent: FloorEvent;
 }
 
 export interface DungeonTheme {
@@ -250,6 +278,30 @@ export interface Particle {
   vy: number;
   color: string;
   size: number;
+  life: number;
+  maxLife: number;
+}
+
+export interface SlashEffect {
+  id: string;
+  x: number;
+  y: number;
+  angle: number;
+  color: string;
+  radius: number;
+  life: number;
+  maxLife: number;
+}
+
+export interface ProjectileEffect {
+  id: string;
+  startX: number;
+  startY: number;
+  targetX: number;
+  targetY: number;
+  color: string;
+  type: 'firebolt' | 'frost_ring' | 'meteor' | 'shadow_trail' | 'arrow';
+  radius?: number;
   life: number;
   maxLife: number;
 }
