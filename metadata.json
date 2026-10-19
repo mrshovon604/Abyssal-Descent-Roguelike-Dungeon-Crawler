@@ -1,0 +1,6 @@
+{
+  "name": "Abyssal Descent: Roguelike Dungeon Crawler",
+  "description": "Procedural turn-based roguelike dungeon crawler featuring permadeath, tactical combat, randomized rare loot, and an expansive skill tree.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
