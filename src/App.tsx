@@ -1310,6 +1310,45 @@ export default function App() {
     advanceTurn();
   };
 
+  const handleQuickPotion = () => {
+    if (!playerRef.current || !floorRef.current) return;
+    const player = playerRef.current;
+    const potions = player.inventory.filter((i) => i.type === 'potion');
+    if (potions.length === 0) {
+      soundEngine.haptic(10);
+      addFloatingText('No Potions!', player.x, player.y - 0.4, '#ef4444');
+      return;
+    }
+
+    const stats = computeTotalPlayerStats(player);
+    const needsHp = player.stats.hp < stats.maxHp;
+    const needsMana = player.stats.mana < stats.maxMana;
+
+    let chosenPotion: Item | undefined;
+
+    if (needsHp) {
+      // Pick the strongest healing potion first
+      chosenPotion = potions
+        .filter((p) => (p.healAmount || 0) > 0)
+        .sort((a, b) => (b.healAmount || 0) - (a.healAmount || 0))[0];
+    }
+
+    if (!chosenPotion && needsMana) {
+      chosenPotion = potions
+        .filter((p) => (p.manaAmount || 0) > 0)
+        .sort((a, b) => (b.manaAmount || 0) - (a.manaAmount || 0))[0];
+    }
+
+    // Fallback to any permanent stat elixir or any available potion
+    if (!chosenPotion) {
+      chosenPotion = potions[0];
+    }
+
+    if (chosenPotion) {
+      handleUseItem(chosenPotion);
+    }
+  };
+
   const handleDropItem = (item: Item) => {
     if (!playerRef.current) return;
     playerRef.current.inventory = playerRef.current.inventory.filter((i) => i.id !== item.id);
@@ -1392,7 +1431,7 @@ export default function App() {
 
       {/* Floor Arrival & Special Event Atmospheric Banner */}
       {screen === 'playing' && floorBanner && (
-        <div className="fixed top-28 sm:top-24 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex flex-col items-center bg-stone-950/95 border border-amber-500/60 px-4 py-2 rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.85)] backdrop-blur-md text-center max-w-[90vw]">
+        <div className="fixed top-20 sm:top-20 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex flex-col items-center bg-stone-950/95 border border-amber-500/60 px-4 py-2 rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.85)] backdrop-blur-md text-center max-w-[90vw]">
           <div className="font-cinzel text-xs sm:text-sm font-bold text-amber-400 tracking-wide">
             {floorBanner.title}
           </div>
@@ -1418,6 +1457,7 @@ export default function App() {
             soundEngine.playFootstep();
             advanceTurn();
           }}
+          onQuickPotion={handleQuickPotion}
           onOpenInventory={() => setIsInventoryOpen(true)}
           onOpenSkillTree={() => setIsSkillTreeOpen(true)}
           onOpenCombatLog={() => setIsCombatLogOpen((prev) => !prev)}
