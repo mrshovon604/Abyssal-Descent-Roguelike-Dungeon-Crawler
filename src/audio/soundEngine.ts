@@ -3,34 +3,182 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Procedural Web Audio API sound synthesizer
+// Procedural Web Audio API sound & dark-fantasy theme music synthesizer
+// + Granular Haptic & Game Settings Manager
 // Zero external audio files required, instant feedback, no network latency.
+
+export type ControllerSizeSetting = 'standard' | 'large' | 'xl';
+export type ControllerModeSetting = 'joystick' | 'dpad';
+export type HapticCategory = 'walk' | 'strike' | 'ui';
+
+export interface GameSettings {
+  sfxEnabled: boolean;
+  musicEnabled: boolean;
+  walkHaptic: boolean;
+  strikeHaptic: boolean;
+  screenShake: boolean;
+  controllerMode: ControllerModeSetting;
+  controllerSize: ControllerSizeSetting;
+}
+
+const DEFAULT_SETTINGS: GameSettings = {
+  sfxEnabled: true,
+  musicEnabled: true,
+  walkHaptic: true,
+  strikeHaptic: true,
+  screenShake: true,
+  controllerMode: 'joystick',
+  controllerSize: 'large',
+};
+
+type SettingsListener = (settings: GameSettings) => void;
 
 class SoundEngine {
   private ctx: AudioContext | null = null;
-  private isMuted: boolean = false;
   private masterGain: GainNode | null = null;
+  private musicGain: GainNode | null = null;
+  private settings: GameSettings = { ...DEFAULT_SETTINGS };
+  private listeners: Set<SettingsListener> = new Set();
+
+  // Procedural Dark-Fantasy Theme Music state
+  private musicIntervalId: number | null = null;
+  private musicStep: number = 0;
+  private droneOsc1: OscillatorNode | null = null;
+  private droneOsc2: OscillatorNode | null = null;
+  private droneGain: GainNode | null = null;
+  private isMusicPlaying: boolean = false;
 
   constructor() {
-    // Check saved mute state
+    this.loadSettings();
+    this.setupAutoUnlock();
+  }
+
+  public loadSettings() {
     try {
-      const savedMute = localStorage.getItem('abyssal_muted');
-      if (savedMute !== null) {
-        this.isMuted = savedMute === 'true';
-      }
+      const raw = localStorage.getItem('abyssal_settings');
+      const parsed = raw ? JSON.parse(raw) : {};
+
+      // Backwards compatibility with legacy keys
+      const legacyMuted = localStorage.getItem('abyssal_muted');
+      const legacyMode = localStorage.getItem('abyssal_ctrl_mode');
+      const legacySize = localStorage.getItem('abyssal_ctrl_size');
+
+      this.settings = {
+        sfxEnabled:
+          typeof parsed.sfxEnabled === 'boolean'
+            ? parsed.sfxEnabled
+            : legacyMuted !== null
+              ? legacyMuted !== 'true'
+              : DEFAULT_SETTINGS.sfxEnabled,
+        musicEnabled:
+          typeof parsed.musicEnabled === 'boolean'
+            ? parsed.musicEnabled
+            : DEFAULT_SETTINGS.musicEnabled,
+        walkHaptic:
+          typeof parsed.walkHaptic === 'boolean'
+            ? parsed.walkHaptic
+            : DEFAULT_SETTINGS.walkHaptic,
+        strikeHaptic:
+          typeof parsed.strikeHaptic === 'boolean'
+            ? parsed.strikeHaptic
+            : DEFAULT_SETTINGS.strikeHaptic,
+        screenShake:
+          typeof parsed.screenShake === 'boolean'
+            ? parsed.screenShake
+            : DEFAULT_SETTINGS.screenShake,
+        controllerMode:
+          parsed.controllerMode === 'joystick' || parsed.controllerMode === 'dpad'
+            ? parsed.controllerMode
+            : legacyMode === 'joystick' || legacyMode === 'dpad'
+              ? legacyMode
+              : DEFAULT_SETTINGS.controllerMode,
+        controllerSize:
+          parsed.controllerSize === 'standard' ||
+          parsed.controllerSize === 'large' ||
+          parsed.controllerSize === 'xl'
+            ? parsed.controllerSize
+            : legacySize === 'standard' || legacySize === 'large' || legacySize === 'xl'
+              ? legacySize
+              : DEFAULT_SETTINGS.controllerSize,
+      };
     } catch {
-      this.isMuted = false;
+      this.settings = { ...DEFAULT_SETTINGS };
     }
+  }
+
+  private persistSettings() {
+    try {
+      localStorage.setItem('abyssal_settings', JSON.stringify(this.settings));
+      localStorage.setItem('abyssal_muted', String(!this.settings.sfxEnabled));
+      localStorage.setItem('abyssal_ctrl_mode', this.settings.controllerMode);
+      localStorage.setItem('abyssal_ctrl_size', this.settings.controllerSize);
+    } catch {}
+    this.listeners.forEach((listener) => listener({ ...this.settings }));
+  }
+
+  public getSettings(): GameSettings {
+    return { ...this.settings };
+  }
+
+  public updateSettings(partial: Partial<GameSettings>): GameSettings {
+    const prevMusic = this.settings.musicEnabled;
+    this.settings = { ...this.settings, ...partial };
+    this.persistSettings();
+
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setValueAtTime(
+        this.settings.sfxEnabled ? 0.35 : 0,
+        this.ctx.currentTime
+      );
+    }
+
+    if (this.settings.musicEnabled !== prevMusic) {
+      if (this.settings.musicEnabled) {
+        this.startThemeMusic();
+      } else {
+        this.stopThemeMusic();
+      }
+    }
+
+    return { ...this.settings };
+  }
+
+  public subscribe(listener: SettingsListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private setupAutoUnlock() {
+    if (typeof window === 'undefined') return;
+    const unlock = () => {
+      this.initContext();
+      if (this.settings.musicEnabled && !this.isMusicPlaying) {
+        this.startThemeMusic();
+      }
+    };
+    window.addEventListener('pointerdown', unlock, { once: true, passive: true });
+    window.addEventListener('keydown', unlock, { once: true, passive: true });
   }
 
   private initContext() {
     if (!this.ctx) {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (AudioCtx) {
         this.ctx = new AudioCtx();
         this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : 0.35, this.ctx.currentTime);
+        this.masterGain.gain.setValueAtTime(
+          this.settings.sfxEnabled ? 0.35 : 0,
+          this.ctx.currentTime
+        );
         this.masterGain.connect(this.ctx.destination);
+
+        this.musicGain = this.ctx.createGain();
+        this.musicGain.gain.setValueAtTime(0.14, this.ctx.currentTime);
+        this.musicGain.connect(this.ctx.destination);
       }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
@@ -39,30 +187,149 @@ class SoundEngine {
   }
 
   public getMuted(): boolean {
-    return this.isMuted;
+    return !this.settings.sfxEnabled;
   }
 
   public toggleMute(): boolean {
-    this.isMuted = !this.isMuted;
-    try {
-      localStorage.setItem('abyssal_muted', String(this.isMuted));
-    } catch {}
-    if (this.masterGain && this.ctx) {
-      this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : 0.35, this.ctx.currentTime);
-    }
-    return this.isMuted;
+    const nextSfx = !this.settings.sfxEnabled;
+    this.updateSettings({ sfxEnabled: nextSfx });
+    return !nextSfx;
   }
 
-  public haptic(ms: number = 15) {
+  /**
+   * Category-aware haptic feedback:
+   * - 'walk': only vibrates when walkHaptic is ON
+   * - 'strike': only vibrates when strikeHaptic is ON
+   * - 'ui': vibrates if either walkHaptic or strikeHaptic is ON
+   */
+  public haptic(ms: number | number[] = 15, category: HapticCategory = 'ui') {
     try {
+      if (category === 'walk' && !this.settings.walkHaptic) return;
+      if (category === 'strike' && !this.settings.strikeHaptic) return;
+      if (category === 'ui' && !this.settings.walkHaptic && !this.settings.strikeHaptic) return;
+
       if (typeof window !== 'undefined' && 'vibrate' in navigator) {
         navigator.vibrate(ms);
       }
     } catch {}
   }
 
+  /**
+   * Procedural Dark-Fantasy Dungeon Theme Music
+   * Uses a deep D-minor sub-bass drone + haunting Phrygian minor arpeggio chimes
+   */
+  public startThemeMusic() {
+    if (!this.settings.musicEnabled) return;
+    this.initContext();
+    if (!this.ctx || !this.musicGain) return;
+    if (this.isMusicPlaying) return;
+
+    this.isMusicPlaying = true;
+    const t = this.ctx.currentTime;
+
+    // Subtle dark dungeon drone (D2 = 73.42Hz + A2 = 110Hz filtered)
+    try {
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(220, t);
+
+      this.droneGain = this.ctx.createGain();
+      this.droneGain.gain.setValueAtTime(0.001, t);
+      this.droneGain.gain.linearRampToValueAtTime(0.28, t + 1.5);
+
+      this.droneOsc1 = this.ctx.createOscillator();
+      this.droneOsc2 = this.ctx.createOscillator();
+      this.droneOsc1.type = 'sawtooth';
+      this.droneOsc2.type = 'triangle';
+      this.droneOsc1.frequency.setValueAtTime(73.42, t); // D2
+      this.droneOsc2.frequency.setValueAtTime(110.0, t); // A2
+
+      this.droneOsc1.connect(filter);
+      this.droneOsc2.connect(filter);
+      filter.connect(this.droneGain);
+      this.droneGain.connect(this.musicGain);
+
+      this.droneOsc1.start(t);
+      this.droneOsc2.start(t);
+    } catch {}
+
+    // Haunting D-Minor / Phrygian arpeggio sequence (D4, F4, A4, Bb4, A4, F4, Eb4, D4, C#4, D4, G4, F4)
+    const melodyNotes = [
+      293.66, // D4
+      349.23, // F4
+      440.0,  // A4
+      466.16, // Bb4
+      440.0,  // A4
+      349.23, // F4
+      311.13, // Eb4
+      293.66, // D4
+      277.18, // C#4
+      293.66, // D4
+      392.0,  // G4
+      349.23, // F4
+    ];
+
+    const playNextNote = () => {
+      if (!this.settings.musicEnabled || !this.ctx || !this.musicGain) return;
+      if (this.ctx.state === 'suspended') return;
+
+      const now = this.ctx.currentTime;
+      const freq = melodyNotes[this.musicStep % melodyNotes.length];
+      this.musicStep++;
+
+      const osc = this.ctx.createOscillator();
+      const noteGain = this.ctx.createGain();
+      const filter = this.ctx.createBiquadFilter();
+
+      osc.type = this.musicStep % 4 === 0 ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(freq, now);
+
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(900, now);
+
+      noteGain.gain.setValueAtTime(0.001, now);
+      noteGain.gain.linearRampToValueAtTime(0.18, now + 0.08);
+      noteGain.gain.exponentialRampToValueAtTime(0.0008, now + 1.45);
+
+      osc.connect(filter);
+      filter.connect(noteGain);
+      noteGain.connect(this.musicGain);
+
+      osc.start(now);
+      osc.stop(now + 1.5);
+    };
+
+    playNextNote();
+    this.musicIntervalId = window.setInterval(playNextNote, 850);
+  }
+
+  public stopThemeMusic() {
+    this.isMusicPlaying = false;
+    if (this.musicIntervalId !== null) {
+      window.clearInterval(this.musicIntervalId);
+      this.musicIntervalId = null;
+    }
+    try {
+      if (this.droneOsc1) {
+        this.droneOsc1.stop();
+        this.droneOsc1.disconnect();
+        this.droneOsc1 = null;
+      }
+      if (this.droneOsc2) {
+        this.droneOsc2.stop();
+        this.droneOsc2.disconnect();
+        this.droneOsc2 = null;
+      }
+      if (this.droneGain) {
+        this.droneGain.disconnect();
+        this.droneGain = null;
+      }
+    } catch {}
+  }
+
   public playFootstep() {
-    if (this.isMuted) return;
+    this.haptic(8, 'walk');
+    if (!this.settings.sfxEnabled) return;
     this.initContext();
     if (!this.ctx || !this.masterGain) return;
 
@@ -89,7 +356,8 @@ class SoundEngine {
   }
 
   public playAttack() {
-    if (this.isMuted) return;
+    this.haptic(22, 'strike');
+    if (!this.settings.sfxEnabled) return;
     this.initContext();
     if (!this.ctx || !this.masterGain) return;
 
@@ -112,7 +380,8 @@ class SoundEngine {
   }
 
   public playHit(isCrit: boolean = false) {
-    if (this.isMuted) return;
+    this.haptic(isCrit ? [30, 30, 45] : 28, 'strike');
+    if (!this.settings.sfxEnabled) return;
     this.initContext();
     if (!this.ctx || !this.masterGain) return;
 
@@ -153,7 +422,8 @@ class SoundEngine {
   }
 
   public playKill() {
-    if (this.isMuted) return;
+    this.haptic(35, 'strike');
+    if (!this.settings.sfxEnabled) return;
     this.initContext();
     if (!this.ctx || !this.masterGain) return;
 
@@ -176,7 +446,8 @@ class SoundEngine {
   }
 
   public playSpell(type: 'fire' | 'frost' | 'shadow' | 'heal' = 'fire') {
-    if (this.isMuted) return;
+    this.haptic(25, 'strike');
+    if (!this.settings.sfxEnabled) return;
     this.initContext();
     if (!this.ctx || !this.masterGain) return;
 
@@ -217,7 +488,7 @@ class SoundEngine {
   }
 
   public playPotion() {
-    if (this.isMuted) return;
+    if (!this.settings.sfxEnabled) return;
     this.initContext();
     if (!this.ctx || !this.masterGain) return;
 
@@ -237,7 +508,7 @@ class SoundEngine {
   }
 
   public playChest() {
-    if (this.isMuted) return;
+    if (!this.settings.sfxEnabled) return;
     this.initContext();
     if (!this.ctx || !this.masterGain) return;
 
@@ -259,20 +530,23 @@ class SoundEngine {
   }
 
   public playLevelUp() {
-    if (this.isMuted) return;
+    if (!this.settings.sfxEnabled) return;
     this.initContext();
     if (!this.ctx || !this.masterGain) return;
 
     const t = this.ctx.currentTime;
     // Heroic fanfare: C4, E4, G4, C5
-    const notes = [261.63, 329.63, 392.00, 523.25, 659.25];
+    const notes = [261.63, 329.63, 392.0, 523.25, 659.25];
     notes.forEach((freq, i) => {
       const osc = this.ctx!.createOscillator();
       const gain = this.ctx!.createGain();
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(freq, t + i * 0.08);
       gain.gain.setValueAtTime(0.2, t + i * 0.08);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.08 + (i === notes.length - 1 ? 0.6 : 0.25));
+      gain.gain.exponentialRampToValueAtTime(
+        0.001,
+        t + i * 0.08 + (i === notes.length - 1 ? 0.6 : 0.25)
+      );
       osc.connect(gain);
       gain.connect(this.masterGain!);
       osc.start(t + i * 0.08);
@@ -281,7 +555,7 @@ class SoundEngine {
   }
 
   public playShrine() {
-    if (this.isMuted) return;
+    if (!this.settings.sfxEnabled) return;
     this.initContext();
     if (!this.ctx || !this.masterGain) return;
 
@@ -304,7 +578,7 @@ class SoundEngine {
   }
 
   public playStairs() {
-    if (this.isMuted) return;
+    if (!this.settings.sfxEnabled) return;
     this.initContext();
     if (!this.ctx || !this.masterGain) return;
 
@@ -327,7 +601,8 @@ class SoundEngine {
   }
 
   public playPlayerHurt() {
-    if (this.isMuted) return;
+    this.haptic(35, 'strike');
+    if (!this.settings.sfxEnabled) return;
     this.initContext();
     if (!this.ctx || !this.masterGain) return;
 
@@ -350,7 +625,8 @@ class SoundEngine {
   }
 
   public playDeath() {
-    if (this.isMuted) return;
+    this.haptic([50, 40, 80], 'strike');
+    if (!this.settings.sfxEnabled) return;
     this.initContext();
     if (!this.ctx || !this.masterGain) return;
 

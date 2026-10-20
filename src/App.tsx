@@ -37,6 +37,7 @@ import { CombatLog } from './components/CombatLog';
 import { GameOverModal } from './components/GameOverModal';
 import { VictoryModal } from './components/VictoryModal';
 import { PauseModal } from './components/PauseModal';
+import { SettingsModal } from './components/SettingsModal';
 import { OfflineIndicator } from './components/PWAInstallButton';
 
 export default function App() {
@@ -45,6 +46,7 @@ export default function App() {
   const [isSkillTreeOpen, setIsSkillTreeOpen] = useState(false);
   const [isMerchantOpen, setIsMerchantOpen] = useState(false);
   const [isCombatLogOpen, setIsCombatLogOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [turnNumber, setTurnNumber] = useState(1);
   const [monstersKilled, setMonstersKilled] = useState(0);
   const [causeOfDeath, setCauseOfDeath] = useState('Slain in the Abyss');
@@ -1462,6 +1464,7 @@ export default function App() {
           onOpenSkillTree={() => setIsSkillTreeOpen(true)}
           onOpenCombatLog={() => setIsCombatLogOpen((prev) => !prev)}
           onOpenMerchant={() => setIsMerchantOpen(true)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
           onTogglePause={() => setScreen('paused')}
           onMoveDirection={handlePlayerMove}
           onAimDirection={handleAimDirection}
@@ -1517,8 +1520,12 @@ export default function App() {
           onResume={() => setScreen('playing')}
           onRestart={() => handleStartGame('warrior')}
           onExitToTitle={() => setScreen('title')}
+          onOpenSettings={() => setIsSettingsOpen(true)}
         />
       )}
+
+      {/* In-Game Settings Modal */}
+      {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
 
       {/* Permadeath Game Over Modal */}
       {screen === 'game_over' && playerRef.current && floorRef.current && (

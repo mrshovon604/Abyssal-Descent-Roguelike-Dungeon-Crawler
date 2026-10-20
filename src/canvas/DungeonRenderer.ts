@@ -13,6 +13,7 @@ import {
   SlashEffect,
   Tile,
 } from '../types/game';
+import { soundEngine } from '../audio/soundEngine';
 
 export class DungeonRenderer {
   private canvas: HTMLCanvasElement;
@@ -38,10 +39,12 @@ export class DungeonRenderer {
   }
 
   public triggerShake(amount: number = 8) {
+    if (!soundEngine.getSettings().screenShake) return;
     this.screenShake = Math.max(this.screenShake, amount);
   }
 
   public triggerHitFlash() {
+    if (!soundEngine.getSettings().screenShake) return;
     this.hitFlashTimer = 0.08;
   }
 

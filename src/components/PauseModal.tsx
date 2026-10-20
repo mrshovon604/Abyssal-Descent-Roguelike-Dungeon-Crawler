@@ -11,12 +11,14 @@ interface PauseModalProps {
   onResume: () => void;
   onRestart: () => void;
   onExitToTitle: () => void;
+  onOpenSettings: () => void;
 }
 
 export const PauseModal: React.FC<PauseModalProps> = ({
   onResume,
   onRestart,
   onExitToTitle,
+  onOpenSettings,
 }) => {
   const [isMuted, setIsMuted] = useState(soundEngine.getMuted());
 
@@ -73,10 +75,20 @@ export const PauseModal: React.FC<PauseModalProps> = ({
           </button>
 
           <button
+            onClick={() => {
+              soundEngine.haptic(15);
+              onOpenSettings();
+            }}
+            className="w-full min-h-[40px] py-2 bg-stone-900 hover:bg-stone-800 active:scale-95 border border-amber-500/40 text-amber-300 font-semibold rounded-xl text-xs transition-all cursor-pointer"
+          >
+            ⚙️ Game Settings (Audio, Haptics &amp; Controls)
+          </button>
+
+          <button
             onClick={handleToggleMute}
             className="w-full min-h-[40px] py-2 bg-stone-900 hover:bg-stone-800 active:scale-95 border border-stone-800 text-stone-200 rounded-xl text-xs transition-all cursor-pointer"
           >
-            {isMuted ? '🔇 Unmute Web Audio' : '🔊 Mute Web Audio'}
+            {isMuted ? '🔇 Unmute Sound Effects' : '🔊 Mute Sound Effects'}
           </button>
 
           <button

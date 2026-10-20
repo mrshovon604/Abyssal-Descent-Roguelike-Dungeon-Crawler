@@ -1,41 +1,55 @@
-# Fix Right-Side Strike & Quick-Potion Buttons Shifting Left During Joystick Touch
+# Comprehensive Settings Menu (Audio, Theme Music, Granular Haptics, Visual Effects & Controller)
 
-When touching the left half of the screen, the floating joystick switches from standard layout flow to `position: fixed` at your left thumb's coordinates. Because the bottom HUD row used `flex justify-between`, removing the joystick from normal document flow caused the right-side **Strike (`⚔️`)**, **Quick-Potion (`🧪`)**, **Wait (`⏳`)**, and **Skill (`1–4`)** buttons to become the first flex item and snap over to the left edge of the screen.
+This update adds a dedicated **⚙️ Settings** option to the **Main Menu**, as well as quick access from the **Pause Menu** and **In-Game HUD Menu (`☰`)**, allowing players to customize audio, procedural dark-fantasy theme music, walking vs. strike haptics, screen shake/hit-flash effects, and controller presets.
 
 > [!IMPORTANT]
-> **Key Fix**: Both the resting left-thumb guide and the right-thumb combat cluster will now be independently anchored to their respective corners (`fixed bottom-8 left-6` and `fixed bottom-8 right-5`) so activating the floating joystick on the left never shifts or moves any right-side buttons.
+> **Confirmed User Choices**
+> - **Audio & Haptic Controls**: Independent toggles for **Sound Effects (SFX)**, **Theme Music**, **Walking Haptics**, and **Strike & Combat Haptics**.
+> - **Additional Settings**: **Default Controller Style & Size** selector (`Floating Stick` vs `D-Pad`, `Standard / Large / XL`) and **Screen Shake & Hit-Flash Effects** toggle.
+> - **Access Points**: Accessible from both the **Main Menu** (`⚙️ Settings` button) and in-game via the **HUD Menu (`☰`)** and **Pause Menu**.
 
 ---
 
 ## 1. Overview & Core Concept
-- **What It Fixes**: Prevents the right-side combat buttons (**Strike**, **Quick-Potion**, **Wait**, and **Active Skills**) from jumping to the left side of the screen whenever the user touches the left half to move with the floating joystick.
-- **Key Value**: Rock-solid, independent multi-touch ergonomics—your left thumb spawns and drags the floating joystick anywhere on the left half while the right-side combat arc stays completely stationary under your right thumb.
+- **What It Does**: Provides a centralized, persistent game settings system stored in `localStorage` (`abyssal_settings`) with real-time Web Audio synthesizer support for atmospheric dungeon theme music, category-aware haptics (`walk`, `strike`, `ui`), visual impact toggles, and controller preferences.
+- **Key Value**: Lets players tailor tactile vibration (e.g., turning off walking vibration while keeping heavy strike vibration), toggle ambient dark-fantasy theme music independently from combat sound effects, and configure their preferred mobile thumbstick setup before or during a run.
 
 ---
 
-## 2. User Experience & Layout Stability
-- **Left Half (Floating Joystick & Resting Guide)**:
-  - The resting joystick indicator stays anchored at a comfortable raised left-thumb position (`fixed bottom-8 left-6`) and fades smoothly when your thumb touches down.
-  - The active floating joystick spawns at your exact `(clientX, clientY)` touch point (`position: fixed`) without affecting any other element on screen.
-- **Right Half (Locked Right-Thumb Combat Arc)**:
-  - The right-side action cluster (**Active Skills `1–4`**, **Wait `⏳`**, **Quick-Potion `🧪`**, and **Strike `⚔️`**) is anchored directly to the bottom-right viewport (`fixed bottom-8 right-5 sm:bottom-10 sm:right-8`) with `ml-auto`, guaranteeing zero horizontal or vertical layout shift regardless of joystick state.
+## 2. User Experience & Settings Breakdown
+
+### 1. Audio & Atmospheric Theme Music
+- **🔊 Sound Effects (SFX) (`On / Off`)**: Controls footsteps, sword slashes, elemental spells, potions, and chest chimes.
+- **🎵 Dark-Fantasy Theme Music (`On / Off`)**: Drives a new procedural Web Audio dark-fantasy ambient synth loop (deep minor-key dungeon drone and haunting arpeggiated chimes with zero external audio downloads required).
+
+### 2. Granular Haptic Vibration Feedback
+- **👣 Haptic for Walking (`On / Off`)**: Controls subtle step vibration when moving with the floating joystick or D-pad.
+- **⚔️ Haptic for Strike & Combat (`On / Off`)**: Controls heavier tactile vibration when pressing Strike, landing critical hits, casting skills, or taking damage.
+
+### 3. Visual Effects & Mobile Controller Defaults
+- **💥 Screen Shake & Hit-Flash (`On / Off`)**: Enables or disables camera shake and red damage flash overlays during combat impacts.
+- **🕹️ Controller Style & Size**: Switch between **Floating Stick** and **D-Pad**, and choose **Standard**, **Large**, or **XL** button sizing directly inside Settings.
 
 ---
 
-## 3. Technical Architecture & Layout Isolation
+## 3. Technical Architecture & State Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│ Top-Left Minimal HUD + [☰]                 Top-Right Mini-Map   │
-├─────────────────────────────────┬───────────────────────────────┤
-│                                 │                               │
-│   LEFT THUMB CAPTURE ZONE       │     RIGHT THUMB COMBAT ARC    │
-│   (fixed left-0 bottom-0        │     (fixed right-5 bottom-8)  │
-│    w-[48vw] h-[68dvh])          │                               │
-│                                 │        [1] [2] [3] [4]        │
-│      ( 🕹️ Floating Origin )     │      (⏳)   (🧪)   ( ⚔️ )     │
-│                                 │     Wait  Potion  Strike      │
-└─────────────────────────────────┴───────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                   Settings Store (localStorage)                      │
+│  sfxEnabled | musicEnabled | walkHaptic | strikeHaptic | screenShake │
+│  controllerMode ('joystick' | 'dpad') | controllerSize ('std'|'lg')  │
+└───────────────┬──────────────────────────────────────┬───────────────┘
+                │                                      │
+                ▼                                      ▼
+┌───────────────────────────────────┐  ┌───────────────────────────────┐
+│        SettingsModal UI           │  │  Runtime Engines & Renderer   │
+│  • Main Menu (⚙️ Settings Button) │  │  • soundEngine (SFX, Theme    │
+│  • In-Game HUD Menu (☰ -> ⚙️)     │  │    Music Synth, Walk/Strike   │
+│  • Pause Modal (⚙️ Settings)      │  │    Haptic filtering)          │
+│                                   │  │  • DungeonRenderer (Shake &   │
+│                                   │  │    Hit-Flash gating)          │
+└───────────────────────────────────┘  └───────────────────────────────┘
 ```
 
-- **Decoupled Positioning**: By changing the right-side combat container and the left-side resting guide from shared flexbox siblings to independent `fixed` containers pinned to `left` and `right`, DOM state changes on the left joystick have zero layout impact on the right combat cluster.
+- **Instant Persistence & Cloud Sync**: All settings persist immediately to `localStorage` and are included when exporting/importing your setup code via the Main Menu **☁️ Sync** modal.

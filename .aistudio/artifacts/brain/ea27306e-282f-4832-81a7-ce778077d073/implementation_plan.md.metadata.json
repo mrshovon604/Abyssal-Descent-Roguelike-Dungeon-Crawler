@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan to fix the layout shift where the right-side Strike and Quick-Potion buttons jump to the left when the floating joystick activates on the left half of the screen.",
-  "updatedAt":  "2026-10-20T17:09:04.269240823Z",
+  "summary":  "Implementation plan for a comprehensive Settings menu accessible from both the Main Menu, Pause Menu, and in-game HUD Menu, featuring Sound Effects, Procedural Dark-Fantasy Theme Music, Walking Haptics, Strike Haptics, Screen Shake & Hit-Flash toggles, and Controller Style/Size configuration.",
+  "updatedAt":  "2026-10-20T17:32:28.992774524Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

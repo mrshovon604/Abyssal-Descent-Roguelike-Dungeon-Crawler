@@ -7,6 +7,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { RunHistoryRecord, SavedRunState } from '../types/game';
 import { soundEngine } from '../audio/soundEngine';
 import { PWAInstallButton } from './PWAInstallButton';
+import { SettingsModal } from './SettingsModal';
 
 interface TitleScreenProps {
   onStartGame: (startingClass: 'warrior' | 'mage' | 'rogue') => void;
@@ -17,6 +18,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onStartGame, onContinu
   const [selectedClass, setSelectedClass] = useState<'warrior' | 'mage' | 'rogue'>('warrior');
   const [showHallOfFame, setShowHallOfFame] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [history, setHistory] = useState<RunHistoryRecord[]>([]);
   const [savedRun, setSavedRun] = useState<SavedRunState | null>(null);
   const [isMuted, setIsMuted] = useState(soundEngine.getMuted());
@@ -50,8 +52,14 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onStartGame, onContinu
   }, [loadLocalData]);
 
   useEffect(() => {
+    return soundEngine.subscribe((s) => {
+      setIsMuted(!s.sfxEnabled);
+    });
+  }, []);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (showSyncModal) return;
+      if (showSyncModal || showSettingsModal) return;
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         soundEngine.haptic(25);
@@ -64,7 +72,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onStartGame, onContinu
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedClass, onStartGame, onContinueGame, savedRun, showSyncModal]);
+  }, [selectedClass, onStartGame, onContinueGame, savedRun, showSyncModal, showSettingsModal]);
 
   const handleToggleMute = () => {
     soundEngine.haptic(15);
@@ -73,17 +81,20 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onStartGame, onContinu
   };
 
   const handleStart = () => {
-    soundEngine.haptic(35);
+    soundEngine.haptic(35, 'strike');
+    soundEngine.startThemeMusic();
     onStartGame(selectedClass);
   };
 
   const handleContinue = () => {
     if (!savedRun || !onContinueGame) return;
-    soundEngine.haptic(35);
+    soundEngine.haptic(35, 'strike');
+    soundEngine.startThemeMusic();
     onContinueGame(savedRun);
   };
 
   const handleLaunchAppPlay = () => {
+    soundEngine.startThemeMusic();
     if (savedRun && onContinueGame) {
       onContinueGame(savedRun);
     } else {
@@ -96,6 +107,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onStartGame, onContinu
       const payload = {
         run: localStorage.getItem('abyssal_saved_run'),
         history: localStorage.getItem('abyssal_history'),
+        settings: localStorage.getItem('abyssal_settings'),
         ctrlMode: localStorage.getItem('abyssal_ctrl_mode'),
         ctrlSize: localStorage.getItem('abyssal_ctrl_size'),
       };
@@ -114,8 +126,10 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onStartGame, onContinu
       const payload = JSON.parse(json);
       if (payload.run) localStorage.setItem('abyssal_saved_run', payload.run);
       if (payload.history) localStorage.setItem('abyssal_history', payload.history);
+      if (payload.settings) localStorage.setItem('abyssal_settings', payload.settings);
       if (payload.ctrlMode) localStorage.setItem('abyssal_ctrl_mode', payload.ctrlMode);
       if (payload.ctrlSize) localStorage.setItem('abyssal_ctrl_size', payload.ctrlSize);
+      soundEngine.loadSettings();
       loadLocalData();
       setSyncStatus('✅ Save & Controller Setup restored! Ready to play.');
       setImportCode('');
@@ -167,7 +181,18 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onStartGame, onContinu
           <PWAInstallButton compact onLaunchAppPlay={handleLaunchAppPlay} />
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3 text-[11px] sm:text-xs">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 text-[11px] sm:text-xs">
+          <button
+            onClick={() => {
+              soundEngine.haptic(15);
+              setShowSettingsModal(true);
+            }}
+            className="min-h-[34px] px-2.5 py-1 rounded-lg bg-stone-900/90 border border-amber-500/50 text-amber-300 flex items-center gap-1 hover:bg-stone-800 active:scale-95 transition-all cursor-pointer normal-case font-semibold"
+          >
+            <span>⚙️</span>
+            <span>Settings</span>
+          </button>
+
           <button
             onClick={() => {
               soundEngine.haptic(15);
@@ -436,6 +461,9 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onStartGame, onContinu
           </div>
         </div>
       )}
+
+      {/* Main Menu Settings Modal */}
+      {showSettingsModal && <SettingsModal onClose={() => setShowSettingsModal(false)} />}
     </div>
   );
 };

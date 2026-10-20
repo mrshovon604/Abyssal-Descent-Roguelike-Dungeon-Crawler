@@ -23,6 +23,7 @@ interface HUDProps {
   onOpenSkillTree: () => void;
   onOpenCombatLog: () => void;
   onOpenMerchant?: () => void;
+  onOpenSettings: () => void;
   onTogglePause: () => void;
   onMoveDirection: (dx: number, dy: number, isHoldRepeat?: boolean) => boolean;
   onAimDirection?: (dx: number, dy: number) => void;
@@ -43,6 +44,7 @@ export const HUD: React.FC<HUDProps> = ({
   onOpenSkillTree,
   onOpenCombatLog,
   onOpenMerchant,
+  onOpenSettings,
   onTogglePause,
   onMoveDirection,
   onAimDirection,
@@ -50,21 +52,20 @@ export const HUD: React.FC<HUDProps> = ({
   onZoomChange,
   isCombatLogOpen,
 }) => {
-  const [controllerSize, setControllerSize] = useState<ControllerSize>(() => {
-    try {
-      const saved = localStorage.getItem('abyssal_ctrl_size');
-      if (saved === 'standard' || saved === 'large' || saved === 'xl') return saved;
-    } catch {}
-    return 'large';
-  });
+  const [controllerSize, setControllerSize] = useState<ControllerSize>(
+    () => soundEngine.getSettings().controllerSize
+  );
 
-  const [controllerMode, setControllerMode] = useState<ControllerMode>(() => {
-    try {
-      const saved = localStorage.getItem('abyssal_ctrl_mode');
-      if (saved === 'joystick' || saved === 'dpad') return saved;
-    } catch {}
-    return 'joystick';
-  });
+  const [controllerMode, setControllerMode] = useState<ControllerMode>(
+    () => soundEngine.getSettings().controllerMode
+  );
+
+  useEffect(() => {
+    return soundEngine.subscribe((s) => {
+      setControllerSize(s.controllerSize);
+      setControllerMode(s.controllerMode);
+    });
+  }, []);
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMiniMapExpanded, setIsMiniMapExpanded] = useState(false);
@@ -92,18 +93,14 @@ export const HUD: React.FC<HUDProps> = ({
 
   const handleSetSize = (size: ControllerSize) => {
     setControllerSize(size);
-    try {
-      localStorage.setItem('abyssal_ctrl_size', size);
-    } catch {}
-    soundEngine.haptic(20);
+    soundEngine.updateSettings({ controllerSize: size });
+    soundEngine.haptic(20, 'ui');
   };
 
   const handleSetMode = (mode: ControllerMode) => {
     setControllerMode(mode);
-    try {
-      localStorage.setItem('abyssal_ctrl_mode', mode);
-    } catch {}
-    soundEngine.haptic(20);
+    soundEngine.updateSettings({ controllerMode: mode });
+    soundEngine.haptic(20, 'ui');
   };
 
   const stopHoldTimerOnly = useCallback(() => {
@@ -147,7 +144,7 @@ export const HUD: React.FC<HUDProps> = ({
           true
         );
         if (canContinue) {
-          soundEngine.haptic(8);
+          soundEngine.haptic(8, 'walk');
         }
       }, 165);
     },
@@ -234,7 +231,7 @@ export const HUD: React.FC<HUDProps> = ({
       if (onAimDirection) {
         onAimDirection(newOctant.dx, newOctant.dy);
       }
-      soundEngine.haptic(12);
+      soundEngine.haptic(10, 'walk');
 
       if (!hasSteppedInitialRef.current || isInitialTouch) {
         hasSteppedInitialRef.current = true;
@@ -272,7 +269,7 @@ export const HUD: React.FC<HUDProps> = ({
     setFloatingOrigin({ x: clampedX, y: clampedY });
     setJoystickActive(true);
     setKnobPos({ x: 0, y: 0 });
-    soundEngine.haptic(15);
+    soundEngine.haptic(12, 'walk');
   };
 
   const handleFloatingZonePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -297,7 +294,7 @@ export const HUD: React.FC<HUDProps> = ({
   const startDpadHoldMove = (dx: number, dy: number, e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    soundEngine.haptic(18);
+    soundEngine.haptic(14, 'walk');
     activeDirRef.current = { dx, dy };
     if (onAimDirection) onAimDirection(dx, dy);
     startStepLoop(true);
@@ -368,28 +365,28 @@ export const HUD: React.FC<HUDProps> = ({
     switch (controllerSize) {
       case 'xl':
         return {
-          dpadBtn: 'w-13 h-13 sm:w-15 sm:h-15 text-lg',
-          dpadDiag: 'w-13 h-13 sm:w-15 sm:h-15 text-sm',
-          actionBtn: 'w-20 h-20 sm:w-22 sm:h-22 text-3xl',
-          subActionBtn: 'w-13 h-13 sm:w-14 sm:h-14 text-lg',
-          skillBtn: 'w-10 h-10 sm:w-12 sm:h-12 text-base',
+          dpadBtn: 'w-12 h-12 sm:w-14 sm:h-14 text-base',
+          dpadDiag: 'w-12 h-12 sm:w-14 sm:h-14 text-xs',
+          actionBtn: 'w-24 h-24 sm:w-27 sm:h-27 text-4xl',
+          subActionBtn: 'w-11 h-11 sm:w-12 sm:h-12 text-base',
+          skillBtn: 'w-9 h-9 sm:w-10 sm:h-10 text-sm',
         };
       case 'standard':
         return {
-          dpadBtn: 'w-10 h-10 text-sm',
-          dpadDiag: 'w-10 h-10 text-xs',
-          actionBtn: 'w-15 h-15 text-2xl',
-          subActionBtn: 'w-11 h-11 text-sm',
-          skillBtn: 'w-9 h-9 sm:w-10 sm:h-10 text-sm',
+          dpadBtn: 'w-9.5 h-9.5 text-xs',
+          dpadDiag: 'w-9.5 h-9.5 text-[10px]',
+          actionBtn: 'w-[78px] h-[78px] text-2xl',
+          subActionBtn: 'w-9.5 h-9.5 text-xs',
+          skillBtn: 'w-8 h-8 sm:w-9 sm:h-9 text-xs',
         };
       case 'large':
       default:
         return {
-          dpadBtn: 'w-11 h-11 sm:w-13 sm:h-13 text-base',
-          dpadDiag: 'w-11 h-11 sm:w-13 sm:h-13 text-xs',
-          actionBtn: 'w-18 h-18 sm:w-20 sm:h-20 text-2xl sm:text-3xl',
-          subActionBtn: 'w-12 h-12 sm:w-13 sm:h-13 text-base',
-          skillBtn: 'w-9.5 h-9.5 sm:w-11 sm:h-11 text-sm sm:text-base',
+          dpadBtn: 'w-11 h-11 sm:w-12 sm:h-12 text-sm',
+          dpadDiag: 'w-11 h-11 sm:w-12 sm:h-12 text-xs',
+          actionBtn: 'w-[90px] h-[90px] sm:w-24 sm:h-24 text-3xl sm:text-4xl',
+          subActionBtn: 'w-10 h-10 sm:w-11 sm:h-11 text-sm',
+          skillBtn: 'w-8.5 h-8.5 sm:w-9.5 sm:h-9.5 text-xs sm:text-sm',
         };
     }
   };
@@ -401,7 +398,7 @@ export const HUD: React.FC<HUDProps> = ({
     e.preventDefault();
     e.stopPropagation();
     setIsStrikePressed(true);
-    soundEngine.haptic(30);
+    soundEngine.haptic(30, 'strike');
     onActionAttack(activeDirRef.current);
   };
 
@@ -414,14 +411,14 @@ export const HUD: React.FC<HUDProps> = ({
   const handleWaitPointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    soundEngine.haptic(15);
+    soundEngine.haptic(12, 'walk');
     onWaitTurn();
   };
 
   const handleQuickPotionPointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    soundEngine.haptic(25);
+    soundEngine.haptic(25, 'strike');
     onQuickPotion();
   };
 
@@ -707,16 +704,19 @@ export const HUD: React.FC<HUDProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center justify-between gap-1.5 pt-1">
               <button
                 onPointerDown={(e) => {
                   e.preventDefault();
-                  soundEngine.haptic(15);
-                  soundEngine.toggleMute();
+                  e.stopPropagation();
+                  soundEngine.haptic(15, 'ui');
+                  setIsMenuOpen(false);
+                  onOpenSettings();
                 }}
-                className="px-2.5 py-1 rounded-lg bg-stone-900 border border-stone-800 text-[11px] text-stone-300 cursor-pointer"
+                className="flex-1 min-h-[34px] px-2.5 py-1 rounded-lg bg-stone-900 hover:bg-stone-800 border border-amber-500/50 text-[11px] font-semibold text-amber-300 flex items-center justify-center gap-1 cursor-pointer active:scale-95"
               >
-                {soundEngine.getMuted() ? '🔇 Unmute' : '🔊 Sound On'}
+                <span>⚙️</span>
+                <span>Settings</span>
               </button>
               <PWAInstallButton compact onLaunchAppPlay={() => setIsMenuOpen(false)} />
             </div>
@@ -749,14 +749,14 @@ export const HUD: React.FC<HUDProps> = ({
         {/* LEFT HALF: FLOATING ANALOG JOYSTICK ZONE (Spawns wherever left thumb touches!) */}
         {controllerMode === 'joystick' ? (
           <>
-            {/* Invisible Multi-Touch Left-Half Capture Zone */}
+            {/* Invisible Multi-Touch Left-Half Capture Zone (Safe below top-left HUD in both portrait & landscape) */}
             <div
               ref={joystickZoneRef}
               onPointerDown={handleFloatingZonePointerDown}
               onPointerMove={handleFloatingZonePointerMove}
               onPointerUp={handleFloatingZonePointerUpOrCancel}
               onPointerCancel={handleFloatingZonePointerUpOrCancel}
-              className="pointer-events-auto fixed left-0 bottom-0 w-[48vw] h-[68dvh] z-20 touch-none cursor-grab active:cursor-grabbing"
+              className="pointer-events-auto fixed left-0 bottom-0 w-[48vw] h-[calc(100dvh-86px)] z-20 touch-none cursor-grab active:cursor-grabbing"
             />
 
             {/* Joystick Base: Always fixed so it never alters document flow or shifts right-side buttons */}
@@ -771,9 +771,6 @@ export const HUD: React.FC<HUDProps> = ({
                       height: joyMetrics.baseSize,
                     }
                   : {
-                      position: 'fixed',
-                      left: 24,
-                      bottom: 32,
                       width: joyMetrics.baseSize,
                       height: joyMetrics.baseSize,
                     }
@@ -781,7 +778,7 @@ export const HUD: React.FC<HUDProps> = ({
               className={`pointer-events-none rounded-full bg-stone-950/75 border-2 transition-opacity duration-150 backdrop-blur-sm flex items-center justify-center z-25 ${
                 joystickActive
                   ? 'opacity-100 border-amber-500/85 shadow-[0_0_24px_rgba(245,158,11,0.3)]'
-                  : 'opacity-60 border-stone-700/70 shadow-xl'
+                  : 'fixed left-5 sm:left-8 top-[64dvh] -translate-y-1/2 opacity-60 border-stone-700/70 shadow-xl'
               }`}
             >
               {/* Subtle Inner Ring */}
@@ -840,12 +837,12 @@ export const HUD: React.FC<HUDProps> = ({
             </div>
           </>
         ) : (
-          /* Raised Ergonomic D-Pad Mode (Locked to Bottom-Left) */
+          /* Raised Ergonomic D-Pad Mode (Slightly lower than vertical middle) */
           <div
             onPointerUp={resetJoystick}
             onPointerCancel={resetJoystick}
             onPointerLeave={resetJoystick}
-            className="pointer-events-auto fixed left-4 sm:left-7 bottom-8 sm:bottom-10 grid grid-cols-3 gap-1 bg-stone-950/85 border border-stone-800/80 p-1 rounded-2xl shadow-2xl backdrop-blur-md touch-none z-30"
+            className="pointer-events-auto fixed left-4 sm:left-7 top-[64dvh] -translate-y-1/2 grid grid-cols-3 gap-1 bg-stone-950/85 border border-stone-800/80 p-1 rounded-2xl shadow-2xl backdrop-blur-md touch-none z-30"
           >
             <button
               onPointerDown={(e) => startDpadHoldMove(-1, -1, e)}
@@ -904,10 +901,10 @@ export const HUD: React.FC<HUDProps> = ({
           </div>
         )}
 
-        {/* RIGHT SIDE: RAISED ERGONOMIC THUMB ARC (Strictly Locked to Bottom-Right) */}
-        <div className="pointer-events-auto fixed right-4 sm:right-7 bottom-8 sm:bottom-10 flex flex-col items-end gap-2 touch-none shrink-0 z-30">
+        {/* RIGHT SIDE: ERGONOMIC THUMB ARC (Slightly lower than vertical middle + Landscape Overlap-Safe) */}
+        <div className="pointer-events-auto fixed right-3 sm:right-6 top-[62dvh] landscape:top-auto landscape:bottom-3 sm:landscape:top-[64dvh] sm:landscape:bottom-auto -translate-y-1/2 landscape:translate-y-0 sm:landscape:-translate-y-1/2 flex flex-col landscape:flex-row sm:landscape:flex-col items-end gap-2 touch-none shrink-0 z-30">
           {/* Streamlined Icon-Only Active Skills Row */}
-          <div className="flex items-center gap-1.5 bg-stone-950/80 border border-stone-800/80 p-1 rounded-xl shadow-lg backdrop-blur-sm">
+          <div className="flex items-center gap-1 bg-stone-950/80 border border-stone-800/80 p-1 rounded-xl shadow-lg backdrop-blur-sm">
             {[0, 1, 2, 3].map((idx) => {
               const skill = activeSkills[idx];
               const cooldown = skill ? player.activeSkillCooldowns[skill.id] || 0 : 0;
@@ -959,7 +956,7 @@ export const HUD: React.FC<HUDProps> = ({
           </div>
 
           {/* Ergonomic Right-Thumb Combat Arc: Wait + Quick-Potion + Primary Strike */}
-          <div className="flex items-end gap-2.5">
+          <div className="flex items-end gap-2">
             {/* Wait / Rest Button */}
             <button
               onPointerDown={handleWaitPointerDown}
@@ -975,7 +972,7 @@ export const HUD: React.FC<HUDProps> = ({
             {/* Quick-Potion Heal Button (Right next to Strike) */}
             <button
               onPointerDown={handleQuickPotionPointerDown}
-              className={`${sizeClasses.subActionBtn} relative rounded-full border-2 flex flex-col items-center justify-center transition-all cursor-pointer shadow-xl backdrop-blur-md touch-none mb-2 ${
+              className={`${sizeClasses.subActionBtn} relative rounded-full border-2 flex flex-col items-center justify-center transition-all cursor-pointer shadow-xl backdrop-blur-md touch-none mb-1.5 ${
                 potionCount > 0
                   ? 'bg-emerald-950/90 border-emerald-500/80 active:border-emerald-300 text-emerald-300 active:scale-90 shadow-[0_0_14px_rgba(16,185,129,0.3)]'
                   : 'bg-stone-900/60 border-stone-800 text-stone-500 opacity-55'
@@ -988,21 +985,21 @@ export const HUD: React.FC<HUDProps> = ({
               </span>
             </button>
 
-            {/* PRIMARY MULTI-TOUCH STRIKE / INTERACT BUTTON */}
+            {/* PRIMARY MULTI-TOUCH STRIKE / INTERACT BUTTON (Sized smaller than Joystick) */}
             <button
               onPointerDown={handleStrikePointerDown}
               onPointerUp={handleStrikePointerUp}
               onPointerCancel={handleStrikePointerUp}
               onPointerLeave={handleStrikePointerUp}
-              className={`${sizeClasses.actionBtn} rounded-full bg-gradient-to-br from-amber-400 via-amber-500 to-red-600 border-3 border-amber-200 text-stone-950 font-black flex flex-col items-center justify-center transition-transform duration-75 cursor-pointer touch-none ${
+              className={`${sizeClasses.actionBtn} rounded-full bg-gradient-to-br from-amber-400 via-amber-500 to-red-600 border-2 border-amber-200 text-stone-950 font-black flex flex-col items-center justify-center transition-transform duration-75 cursor-pointer touch-none ${
                 isStrikePressed
                   ? 'scale-90 shadow-[0_0_40px_rgba(245,158,11,0.95)] brightness-110'
-                  : 'shadow-[0_0_26px_rgba(245,158,11,0.55)]'
+                  : 'shadow-[0_0_22px_rgba(245,158,11,0.5)]'
               }`}
               title="Strike / Interact (Multi-Touch Ready)"
             >
               <span className="leading-none filter drop-shadow">⚔️</span>
-              <span className="text-[9px] font-cinzel font-black tracking-wider uppercase text-stone-950 leading-none mt-0.5">
+              <span className="text-[8px] font-cinzel font-black tracking-wider uppercase text-stone-950 leading-none mt-0.5">
                 Strike
               </span>
             </button>
