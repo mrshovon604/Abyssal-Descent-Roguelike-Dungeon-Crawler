@@ -68,8 +68,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     {
       key: 'musicEnabled',
       icon: settings.musicEnabled ? '🎵' : '🔕',
-      label: 'Theme Music',
-      desc: 'Atmospheric dark-fantasy dungeon synth & haunting chimes',
+      label: 'Theme Music (Synth Arp)',
+      desc: 'Stranger Things-style progressive synth arpeggio & mysterious pads',
     },
     {
       key: 'walkHaptic',

@@ -215,8 +215,12 @@ class SoundEngine {
   }
 
   /**
-   * Procedural Dark-Fantasy Dungeon Theme Music
-   * Uses a deep D-minor sub-bass drone + haunting Phrygian minor arpeggio chimes
+   * Stranger Things-Inspired Progressive Synth Arpeggio & Mysterious Theme Music
+   * - 8-note rising & falling analog sawtooth/triangle arpeggiator (C3-E3-G3-B3-C4-B3-G3-E3)
+   *   that shifts into a dark tension chord (A2-E3-G3-B3-C4-B3-G3-E3) every 4 bars
+   * - Progressive resonant low-pass filter sweep (340Hz <-> 2400Hz) that breathes over time
+   * - Deep analog sub-bass drone + double-thump heartbeat pulse on every bar
+   * - Mysterious high detuned eerie pad swells in the background
    */
   public startThemeMusic() {
     if (!this.settings.musicEnabled) return;
@@ -227,22 +231,24 @@ class SoundEngine {
     this.isMusicPlaying = true;
     const t = this.ctx.currentTime;
 
-    // Subtle dark dungeon drone (D2 = 73.42Hz + A2 = 110Hz filtered)
+    // 1. Deep Analog Sub-Bass Drone (C2 = 65.41Hz + G2 = 98.00Hz warm low-passed pad)
     try {
       const filter = this.ctx.createBiquadFilter();
       filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(220, t);
+      filter.frequency.setValueAtTime(160, t);
 
       this.droneGain = this.ctx.createGain();
       this.droneGain.gain.setValueAtTime(0.001, t);
-      this.droneGain.gain.linearRampToValueAtTime(0.28, t + 1.5);
+      this.droneGain.gain.linearRampToValueAtTime(0.24, t + 2.0);
 
       this.droneOsc1 = this.ctx.createOscillator();
       this.droneOsc2 = this.ctx.createOscillator();
       this.droneOsc1.type = 'sawtooth';
       this.droneOsc2.type = 'triangle';
-      this.droneOsc1.frequency.setValueAtTime(73.42, t); // D2
-      this.droneOsc2.frequency.setValueAtTime(110.0, t); // A2
+      this.droneOsc1.frequency.setValueAtTime(65.41, t); // C2
+      this.droneOsc1.detune.setValueAtTime(-6, t);
+      this.droneOsc2.frequency.setValueAtTime(130.81, t); // C3 warm sub-octave
+      this.droneOsc2.detune.setValueAtTime(6, t);
 
       this.droneOsc1.connect(filter);
       this.droneOsc2.connect(filter);
@@ -253,54 +259,163 @@ class SoundEngine {
       this.droneOsc2.start(t);
     } catch {}
 
-    // Haunting D-Minor / Phrygian arpeggio sequence (D4, F4, A4, Bb4, A4, F4, Eb4, D4, C#4, D4, G4, F4)
-    const melodyNotes = [
-      293.66, // D4
-      349.23, // F4
-      440.0,  // A4
-      466.16, // Bb4
-      440.0,  // A4
-      349.23, // F4
-      311.13, // Eb4
-      293.66, // D4
-      277.18, // C#4
-      293.66, // D4
-      392.0,  // G4
-      349.23, // F4
+    // Classic 8-note Cmaj7 progressive arpeggio: C3 - E3 - G3 - B3 - C4 - B3 - G3 - E3
+    const arpPatternCmaj7 = [
+      130.81, // C3
+      164.81, // E3
+      196.00, // G3
+      246.94, // B3
+      261.63, // C4
+      246.94, // B3
+      196.00, // G3
+      164.81, // E3
     ];
 
-    const playNextNote = () => {
+    // Darker mysterious tension variation (Am9 / Fmaj7#11 feel) on bars 5-6
+    const arpPatternMystery = [
+      110.00, // A2
+      164.81, // E3
+      196.00, // G3
+      246.94, // B3
+      293.66, // D4
+      246.94, // B3
+      196.00, // G3
+      164.81, // E3
+    ];
+
+    // Eerie high mystery pad notes that slowly swell in the background
+    const mysteryPadNotes = [
+      493.88, // B4
+      659.25, // E5
+      587.33, // D5
+      392.00, // G4
+      369.99, // F#4 (Lydian/Eerie tension)
+      493.88, // B4
+    ];
+
+    const playArpStep = () => {
       if (!this.settings.musicEnabled || !this.ctx || !this.musicGain) return;
       if (this.ctx.state === 'suspended') return;
 
       const now = this.ctx.currentTime;
-      const freq = melodyNotes[this.musicStep % melodyNotes.length];
-      this.musicStep++;
+      const step = this.musicStep++;
+      const barIndex = Math.floor(step / 8);
+      const stepInBar = step % 8;
 
-      const osc = this.ctx.createOscillator();
+      // Alternate between 4 bars of iconic Cmaj7 and 2 bars of dark Am9 tension
+      const useMysteryChord = barIndex % 6 >= 4;
+      const pattern = useMysteryChord ? arpPatternMystery : arpPatternCmaj7;
+      const freq = pattern[stepInBar];
+
+      // Shift sub-drone root smoothly between C2 (65.41Hz) and A1 (55.0Hz)
+      if (stepInBar === 0 && this.droneOsc1 && this.droneOsc2) {
+        const rootFreq = useMysteryChord ? 55.0 : 65.41;
+        this.droneOsc1.frequency.setTargetAtTime(rootFreq, now, 0.15);
+        this.droneOsc2.frequency.setTargetAtTime(rootFreq * 2, now, 0.15);
+      }
+
+      // Progressive Filter Cutoff Sweep (breathes between 340Hz and 2350Hz over 64 steps)
+      const sweepPhase = (Math.sin((step / 64) * Math.PI * 2 - Math.PI / 2) + 1) / 2; // 0..1
+      const cutoff = 340 + sweepPhase * 2010;
+
+      // Dual detuned analog synth oscillators for each arpeggio note
+      const oscSaw = this.ctx.createOscillator();
+      const oscTri = this.ctx.createOscillator();
+      const arpFilter = this.ctx.createBiquadFilter();
       const noteGain = this.ctx.createGain();
-      const filter = this.ctx.createBiquadFilter();
 
-      osc.type = this.musicStep % 4 === 0 ? 'triangle' : 'sine';
-      osc.frequency.setValueAtTime(freq, now);
+      oscSaw.type = 'sawtooth';
+      oscTri.type = 'triangle';
 
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(900, now);
+      // Subtle octave shimmer on top note of arpeggio (stepInBar === 4) when filter opens up
+      const noteFreq = stepInBar === 4 && sweepPhase > 0.65 ? freq * 2 : freq;
+      oscSaw.frequency.setValueAtTime(noteFreq, now);
+      oscTri.frequency.setValueAtTime(noteFreq, now);
+      oscSaw.detune.setValueAtTime(-7, now);
+      oscTri.detune.setValueAtTime(7, now);
 
+      arpFilter.type = 'lowpass';
+      arpFilter.Q.setValueAtTime(4.2, now); // Resonant analog synth bite
+      arpFilter.frequency.setValueAtTime(cutoff, now);
+      arpFilter.frequency.exponentialRampToValueAtTime(Math.max(220, cutoff * 0.42), now + 0.16);
+
+      // Plucky analog envelope
+      const accent = stepInBar === 0 || stepInBar === 4 ? 0.21 : 0.15;
       noteGain.gain.setValueAtTime(0.001, now);
-      noteGain.gain.linearRampToValueAtTime(0.18, now + 0.08);
-      noteGain.gain.exponentialRampToValueAtTime(0.0008, now + 1.45);
+      noteGain.gain.linearRampToValueAtTime(accent, now + 0.014);
+      noteGain.gain.exponentialRampToValueAtTime(0.0008, now + 0.17);
 
-      osc.connect(filter);
-      filter.connect(noteGain);
+      oscSaw.connect(arpFilter);
+      oscTri.connect(arpFilter);
+      arpFilter.connect(noteGain);
       noteGain.connect(this.musicGain);
 
-      osc.start(now);
-      osc.stop(now + 1.5);
+      oscSaw.start(now);
+      oscTri.start(now);
+      oscSaw.stop(now + 0.18);
+      oscTri.stop(now + 0.18);
+
+      // 2. Deep Analog Heartbeat Pulse on beat 0 and beat 1 of each 8-step bar
+      if (stepInBar === 0 || stepInBar === 1) {
+        const pulseOsc = this.ctx.createOscillator();
+        const pulseGain = this.ctx.createGain();
+        pulseOsc.type = 'sine';
+        pulseOsc.frequency.setValueAtTime(stepInBar === 0 ? 68 : 54, now);
+        pulseOsc.frequency.exponentialRampToValueAtTime(28, now + 0.14);
+
+        pulseGain.gain.setValueAtTime(stepInBar === 0 ? 0.34 : 0.24, now);
+        pulseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+        pulseOsc.connect(pulseGain);
+        pulseGain.connect(this.musicGain);
+        pulseOsc.start(now);
+        pulseOsc.stop(now + 0.16);
+      }
+
+      // 3. Mysterious Eerie Atmospheric Synth Swell every 16 steps (2 bars)
+      if (step % 16 === 0) {
+        const padIdx = Math.floor(step / 16) % mysteryPadNotes.length;
+        const padFreq = mysteryPadNotes[padIdx];
+
+        const padOsc1 = this.ctx.createOscillator();
+        const padOsc2 = this.ctx.createOscillator();
+        const padFilter = this.ctx.createBiquadFilter();
+        const padGain = this.ctx.createGain();
+
+        padOsc1.type = 'sine';
+        padOsc2.type = 'sawtooth';
+        padOsc1.frequency.setValueAtTime(padFreq, now);
+        padOsc2.frequency.setValueAtTime(padFreq, now);
+        padOsc1.detune.setValueAtTime(-11, now);
+        padOsc2.detune.setValueAtTime(11, now);
+
+        // Slow eerie pitch drift
+        padOsc1.frequency.linearRampToValueAtTime(padFreq * 0.996, now + 2.6);
+
+        padFilter.type = 'lowpass';
+        padFilter.frequency.setValueAtTime(520, now);
+        padFilter.frequency.linearRampToValueAtTime(1250, now + 1.3);
+        padFilter.frequency.linearRampToValueAtTime(420, now + 2.7);
+
+        padGain.gain.setValueAtTime(0.0005, now);
+        padGain.gain.linearRampToValueAtTime(0.11, now + 1.1);
+        padGain.gain.exponentialRampToValueAtTime(0.0008, now + 2.75);
+
+        padOsc1.connect(padFilter);
+        padOsc2.connect(padFilter);
+        padFilter.connect(padGain);
+        padGain.connect(this.musicGain);
+
+        padOsc1.start(now);
+        padOsc2.start(now);
+        padOsc1.stop(now + 2.8);
+        padOsc2.stop(now + 2.8);
+      }
     };
 
-    playNextNote();
-    this.musicIntervalId = window.setInterval(playNextNote, 850);
+    playArpStep();
+    // 175ms per 16th-note step (~171 BPM 80s analog synth pulse)
+    this.musicIntervalId = window.setInterval(playArpStep, 175);
   }
 
   public stopThemeMusic() {
