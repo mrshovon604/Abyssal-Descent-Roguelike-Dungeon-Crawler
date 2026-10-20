@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Player, DungeonFloor, SkillNode } from '../types/game';
 import { soundEngine } from '../audio/soundEngine';
+import { PWAInstallButton } from './PWAInstallButton';
 
 export type ControllerSize = 'standard' | 'large' | 'xl';
 export type ControllerMode = 'joystick' | 'dpad';
@@ -82,6 +83,12 @@ export const HUD: React.FC<HUDProps> = ({
   const activeDirRef = useRef<{ dx: number; dy: number } | null>(null);
   const hasSteppedInitialRef = useRef<boolean>(false);
 
+  // Use a ref for onMoveDirection so the interval never resets on re-render
+  const onMoveDirectionRef = useRef(onMoveDirection);
+  useEffect(() => {
+    onMoveDirectionRef.current = onMoveDirection;
+  }, [onMoveDirection]);
+
   const handleSetSize = (size: ControllerSize) => {
     setControllerSize(size);
     try {
@@ -126,7 +133,7 @@ export const HUD: React.FC<HUDProps> = ({
       stopHoldTimerOnly();
 
       if (initialStep && activeDirRef.current) {
-        onMoveDirection(activeDirRef.current.dx, activeDirRef.current.dy, false);
+        onMoveDirectionRef.current(activeDirRef.current.dx, activeDirRef.current.dy, false);
       }
 
       holdTimerRef.current = window.setInterval(() => {
@@ -134,7 +141,7 @@ export const HUD: React.FC<HUDProps> = ({
           stopHoldTimerOnly();
           return;
         }
-        const canContinue = onMoveDirection(
+        const canContinue = onMoveDirectionRef.current(
           activeDirRef.current.dx,
           activeDirRef.current.dy,
           true
@@ -144,11 +151,15 @@ export const HUD: React.FC<HUDProps> = ({
         }
       }, 165);
     },
-    [onMoveDirection, stopHoldTimerOnly]
+    [stopHoldTimerOnly]
   );
 
   // Convert joystick (dx, dy) pixel offset into 8-way dungeon step
-  const computeOctant = (dx: number, dy: number, deadzone: number): { dx: number; dy: number } | null => {
+  const computeOctant = (
+    dx: number,
+    dy: number,
+    deadzone: number
+  ): { dx: number; dy: number } | null => {
     const dist = Math.hypot(dx, dy);
     if (dist < deadzone) return null;
 
@@ -177,16 +188,16 @@ export const HUD: React.FC<HUDProps> = ({
     }
   };
 
-  // Get joystick dimensions based on controllerSize
+  // Get joystick dimensions based on controllerSize (clamped safely for mobile widths)
   const getJoystickMetrics = () => {
     switch (controllerSize) {
       case 'xl':
-        return { baseSize: 164, knobSize: 66, maxDist: 52, deadzone: 14 };
+        return { baseSize: 152, knobSize: 62, maxDist: 48, deadzone: 13 };
       case 'standard':
-        return { baseSize: 124, knobSize: 50, maxDist: 38, deadzone: 11 };
+        return { baseSize: 118, knobSize: 48, maxDist: 36, deadzone: 10 };
       case 'large':
       default:
-        return { baseSize: 144, knobSize: 58, maxDist: 45, deadzone: 13 };
+        return { baseSize: 136, knobSize: 54, maxDist: 42, deadzone: 12 };
     }
   };
 
@@ -228,7 +239,6 @@ export const HUD: React.FC<HUDProps> = ({
       }
       soundEngine.haptic(12);
 
-      // Trigger immediate step on first deflection from center, then continuous loop
       if (!hasSteppedInitialRef.current || isInitialTouch) {
         hasSteppedInitialRef.current = true;
         startStepLoop(true);
@@ -243,7 +253,6 @@ export const HUD: React.FC<HUDProps> = ({
     e.preventDefault();
     e.stopPropagation();
 
-    // Lock only this specific thumb pointerId to the joystick
     if (joystickPointerIdRef.current !== null) return;
     joystickPointerIdRef.current = e.pointerId;
     hasSteppedInitialRef.current = false;
@@ -299,7 +308,7 @@ export const HUD: React.FC<HUDProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const scale = isMiniMapExpanded ? 4 : 2;
+    const scale = isMiniMapExpanded ? 3 : 2;
     canvas.width = floor.width * scale;
     canvas.height = floor.height * scale;
 
@@ -356,28 +365,28 @@ export const HUD: React.FC<HUDProps> = ({
     switch (controllerSize) {
       case 'xl':
         return {
-          dpadBtn: 'w-15 h-15 sm:w-17 sm:h-17 text-xl',
-          dpadDiag: 'w-15 h-15 sm:w-17 sm:h-17 text-base',
-          actionBtn: 'w-22 h-22 sm:w-24 sm:h-24 text-3xl',
-          subActionBtn: 'w-15 h-15 text-xl',
-          skillBtn: 'w-13 h-14 sm:w-14 sm:h-15 text-lg sm:text-xl',
+          dpadBtn: 'w-13 h-13 sm:w-15 sm:h-15 text-lg',
+          dpadDiag: 'w-13 h-13 sm:w-15 sm:h-15 text-sm',
+          actionBtn: 'w-20 h-20 sm:w-24 sm:h-24 text-3xl',
+          subActionBtn: 'w-13 h-13 sm:w-15 sm:h-15 text-lg',
+          skillBtn: 'w-10 h-11 sm:w-13 sm:h-14 text-base sm:text-lg',
         };
       case 'standard':
         return {
-          dpadBtn: 'w-11 h-11 text-base',
-          dpadDiag: 'w-11 h-11 text-xs',
+          dpadBtn: 'w-10 h-10 text-sm',
+          dpadDiag: 'w-10 h-10 text-xs',
           actionBtn: 'w-16 h-16 text-2xl',
-          subActionBtn: 'w-12 h-12 text-base',
-          skillBtn: 'w-11 h-12 text-base',
+          subActionBtn: 'w-11 h-11 text-sm',
+          skillBtn: 'w-9 h-10 sm:w-11 sm:h-12 text-sm',
         };
       case 'large':
       default:
         return {
-          dpadBtn: 'w-13 h-13 sm:w-14 sm:h-14 text-lg',
-          dpadDiag: 'w-13 h-13 sm:w-14 sm:h-14 text-sm',
-          actionBtn: 'w-20 h-20 text-3xl',
-          subActionBtn: 'w-14 h-14 text-lg',
-          skillBtn: 'w-12 h-13 sm:w-13 sm:h-14 text-base sm:text-lg',
+          dpadBtn: 'w-11 h-11 sm:w-13 sm:h-13 text-base',
+          dpadDiag: 'w-11 h-11 sm:w-13 sm:h-13 text-xs',
+          actionBtn: 'w-18 h-18 sm:w-20 sm:h-20 text-2xl sm:text-3xl',
+          subActionBtn: 'w-12 h-12 sm:w-14 sm:h-14 text-base',
+          skillBtn: 'w-10 h-11 sm:w-12 sm:h-13 text-sm sm:text-base',
         };
     }
   };
@@ -391,7 +400,6 @@ export const HUD: React.FC<HUDProps> = ({
     e.stopPropagation();
     setIsStrikePressed(true);
     soundEngine.haptic(30);
-    // Pass current joystick aim direction so player strikes where they are aiming!
     onActionAttack(activeDirRef.current);
   };
 
@@ -422,196 +430,271 @@ export const HUD: React.FC<HUDProps> = ({
   ];
 
   return (
-    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-1.5 sm:p-3 md:p-4 select-none z-20 pb-safe pt-safe overflow-hidden">
+    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-1.5 sm:p-3 select-none z-20 pb-safe pt-safe overflow-hidden">
       {/* =========================================================================
-          TOP PERIMETER BAR: Compact Mobile-Optimized Status & Mini-Map
+          TOP PERIMETER: Compact Status Bar + Quick Menu Dock (Zero Overlap)
           ========================================================================= */}
-      <div className="w-full flex justify-between items-start gap-1.5">
-        {/* Left Status Cluster: Compact on mobile screens to maximize viewport */}
-        <div className="flex flex-col gap-1">
-          <div className="pointer-events-auto bg-stone-950/90 border border-stone-800/90 rounded-xl p-2 sm:p-2.5 shadow-xl backdrop-blur-sm min-w-[148px] sm:min-w-[200px]">
-            <div className="flex items-center justify-between mb-1">
-              <span className="font-cinzel text-[11px] sm:text-xs font-bold text-amber-400">
-                LVL {player.stats.level}
-              </span>
-              <span className="font-mono-stat text-[9px] sm:text-[10px] text-stone-400 tabular-nums">
-                XP {player.stats.xp}/{player.stats.xpToNextLevel}
-              </span>
+      <div className="w-full flex flex-col gap-1.5">
+        <div className="w-full flex justify-between items-start gap-1.5">
+          {/* Top-Left: HP / MP / XP Status Card */}
+          <div className="flex flex-col gap-1 min-w-0">
+            <div className="pointer-events-auto bg-stone-950/90 border border-stone-800/90 rounded-xl p-1.5 sm:p-2.5 shadow-xl backdrop-blur-sm w-[142px] sm:w-[195px]">
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="font-cinzel text-[10px] sm:text-xs font-bold text-amber-400">
+                  LVL {player.stats.level}
+                </span>
+                <span className="font-mono-stat text-[9px] sm:text-[10px] text-stone-400 tabular-nums">
+                  XP {player.stats.xp}/{player.stats.xpToNextLevel}
+                </span>
+              </div>
+
+              {/* XP Bar */}
+              <div className="w-full h-1 bg-stone-900 rounded-full overflow-hidden mb-1 border border-stone-800/60">
+                <div
+                  className="h-full bg-amber-500 transition-all duration-200"
+                  style={{ width: `${xpPercent}%` }}
+                />
+              </div>
+
+              {/* HP Bar */}
+              <div className="mb-1">
+                <div className="flex justify-between text-[9px] sm:text-[10px] font-mono-stat text-stone-200 mb-0.5">
+                  <span className="text-red-400 font-bold">❤️ HP</span>
+                  <span className="tabular-nums font-bold">
+                    {player.stats.hp}/{player.stats.maxHp}
+                  </span>
+                </div>
+                <div className="w-full h-1.5 sm:h-2 bg-stone-900 border border-stone-800 rounded overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-red-600 to-rose-500 transition-all duration-150"
+                    style={{ width: `${hpPercent}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Mana Bar */}
+              <div>
+                <div className="flex justify-between text-[9px] sm:text-[10px] font-mono-stat text-stone-200 mb-0.5">
+                  <span className="text-sky-400 font-bold">💧 MP</span>
+                  <span className="tabular-nums font-bold">
+                    {player.stats.mana}/{player.stats.maxMana}
+                  </span>
+                </div>
+                <div className="w-full h-1.5 sm:h-2 bg-stone-900 border border-stone-800 rounded overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-sky-600 to-blue-500 transition-all duration-150"
+                    style={{ width: `${manaPercent}%` }}
+                  />
+                </div>
+              </div>
             </div>
 
-            {/* XP Bar */}
-            <div className="w-full h-1 bg-stone-900 rounded-full overflow-hidden mb-1.5 border border-stone-800/60">
+            {/* Active Floor Event Badge */}
+            {floor.floorEvent && floor.floorEvent.type !== 'none' && (
               <div
-                className="h-full bg-amber-500 transition-all duration-200"
-                style={{ width: `${xpPercent}%` }}
-              />
-            </div>
-
-            {/* HP Bar */}
-            <div className="mb-1">
-              <div className="flex justify-between text-[10px] font-mono-stat text-stone-200 mb-0.5">
-                <span className="text-red-400 font-bold">❤️ HP</span>
-                <span className="tabular-nums font-bold">
-                  {player.stats.hp}/{player.stats.maxHp}
+                className="pointer-events-auto bg-stone-950/90 border border-stone-800/90 rounded-lg px-2 py-0.5 shadow-lg backdrop-blur-sm flex items-center gap-1 max-w-[142px] sm:max-w-[195px]"
+                title={floor.floorEvent.description}
+              >
+                <span className="text-[11px] shrink-0">{floor.floorEvent.icon}</span>
+                <span
+                  className="font-cinzel text-[9px] sm:text-[10px] font-bold truncate"
+                  style={{ color: floor.floorEvent.color }}
+                >
+                  {floor.floorEvent.name}
                 </span>
               </div>
-              <div className="w-full h-2 sm:h-2.5 bg-stone-900 border border-stone-800 rounded overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-red-600 to-rose-500 transition-all duration-150"
-                  style={{ width: `${hpPercent}%` }}
-                />
+            )}
+          </div>
+
+          {/* Top-Right: Depth, Gold, System Controls & Mini-Map */}
+          <div className="pointer-events-auto flex items-start gap-1">
+            <div className="bg-stone-950/90 border border-stone-800/90 rounded-xl px-2 py-1.5 text-right shadow-xl backdrop-blur-sm">
+              <div className="font-cinzel text-[10px] sm:text-xs font-bold text-amber-400 truncate max-w-[105px] sm:max-w-none">
+                {floor.floorNumber}F · {floor.theme.name}
+              </div>
+              <div className="flex items-center justify-end gap-1.5 text-[9px] sm:text-[10px] font-mono-stat text-stone-300 mt-0.5">
+                <span>
+                  🪙 <span className="text-amber-300 font-bold tabular-nums">{player.stats.gold}</span>
+                </span>
+                <span>
+                  ⏳ <span className="tabular-nums">{turnNumber}</span>
+                </span>
+              </div>
+
+              <div className="flex items-center justify-end gap-1 mt-1">
+                <button
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    soundEngine.haptic(15);
+                    setShowSettings((s) => !s);
+                  }}
+                  className="min-h-[26px] px-1.5 py-0.5 rounded bg-stone-900 border border-stone-800 hover:border-amber-500 text-stone-300 text-[9px] font-mono-stat font-semibold active:scale-95 cursor-pointer"
+                  title="Controller & App Settings"
+                >
+                  🕹️ {controllerSize.toUpperCase()}
+                </button>
+                <button
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    soundEngine.haptic(15);
+                    soundEngine.toggleMute();
+                  }}
+                  className="w-6.5 h-6.5 rounded bg-stone-900 border border-stone-800 text-stone-300 flex items-center justify-center text-[11px] active:scale-95 cursor-pointer"
+                  title="Toggle Audio"
+                >
+                  {soundEngine.getMuted() ? '🔇' : '🔊'}
+                </button>
+                <button
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    soundEngine.haptic(15);
+                    onTogglePause();
+                  }}
+                  className="w-6.5 h-6.5 rounded bg-stone-900 border border-stone-800 text-stone-300 flex items-center justify-center text-[11px] active:scale-95 cursor-pointer"
+                  title="Pause [Esc]"
+                >
+                  ⏸️
+                </button>
               </div>
             </div>
 
-            {/* Mana Bar */}
-            <div>
-              <div className="flex justify-between text-[10px] font-mono-stat text-stone-200 mb-0.5">
-                <span className="text-sky-400 font-bold">💧 MP</span>
-                <span className="tabular-nums font-bold">
-                  {player.stats.mana}/{player.stats.maxMana}
+            {/* Corner Mini-Map & Zoom Cluster */}
+            <div className="bg-stone-950/95 border border-stone-800 rounded-xl p-1 shadow-2xl backdrop-blur-md flex flex-col items-center shrink-0">
+              <div
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  soundEngine.haptic(15);
+                  setIsMiniMapExpanded((prev) => !prev);
+                }}
+                className="relative rounded-lg overflow-hidden border border-stone-800 cursor-pointer"
+                title="Tap to expand/collapse Mini-Map"
+              >
+                <canvas
+                  ref={miniMapCanvasRef}
+                  className="block"
+                  style={{
+                    width: isMiniMapExpanded ? 116 : 60,
+                    height: isMiniMapExpanded ? 116 : 60,
+                  }}
+                />
+                <span className="absolute bottom-0.5 right-0.5 text-[8px] font-mono-stat text-stone-400 bg-black/75 px-1 rounded">
+                  {isMiniMapExpanded ? '✕' : '🗺️'}
                 </span>
               </div>
-              <div className="w-full h-1.5 sm:h-2 bg-stone-900 border border-stone-800 rounded overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-sky-600 to-blue-500 transition-all duration-150"
-                  style={{ width: `${manaPercent}%` }}
-                />
+
+              <div className="flex items-center justify-between w-full gap-1 mt-1">
+                <button
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    soundEngine.haptic(12);
+                    onZoomChange(-6);
+                  }}
+                  className="flex-1 py-0.5 rounded bg-stone-900 border border-stone-800 text-[9px] font-mono-stat text-stone-300 active:scale-95 cursor-pointer"
+                  title="Zoom Out"
+                >
+                  -
+                </button>
+                <button
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    soundEngine.haptic(12);
+                    onZoomChange(6);
+                  }}
+                  className="flex-1 py-0.5 rounded bg-stone-900 border border-stone-800 text-[9px] font-mono-stat text-stone-300 active:scale-95 cursor-pointer"
+                  title="Zoom In"
+                >
+                  +
+                </button>
               </div>
             </div>
           </div>
-
-          {/* Active Floor Event Pill */}
-          {floor.floorEvent && floor.floorEvent.type !== 'none' && (
-            <div
-              className="pointer-events-auto bg-stone-950/90 border border-stone-800/90 rounded-lg px-2 py-0.5 shadow-lg backdrop-blur-sm flex items-center gap-1.5 max-w-[175px] sm:max-w-[230px]"
-              title={floor.floorEvent.description}
-            >
-              <span className="text-xs shrink-0">{floor.floorEvent.icon}</span>
-              <span
-                className="font-cinzel text-[9px] sm:text-[10px] font-bold truncate"
-                style={{ color: floor.floorEvent.color }}
-              >
-                {floor.floorEvent.name}
-              </span>
-            </div>
-          )}
         </div>
 
-        {/* Right Status, Mini-Map & Utility Controls */}
-        <div className="pointer-events-auto flex items-start gap-1.5">
-          {/* Depth, Gold & System Buttons */}
-          <div className="bg-stone-950/90 border border-stone-800/90 rounded-xl px-2 py-1.5 text-right shadow-xl backdrop-blur-sm">
-            <div className="font-cinzel text-[11px] sm:text-xs font-bold text-amber-400 truncate max-w-[115px] sm:max-w-none">
-              {floor.floorNumber}F · {floor.theme.name}
-            </div>
-            <div className="flex items-center justify-end gap-2 text-[10px] font-mono-stat text-stone-300 mt-0.5">
-              <span>
-                🪙 <span className="text-amber-300 font-bold tabular-nums">{player.stats.gold}</span>
-              </span>
-              <span>
-                ⏳ <span className="tabular-nums">{turnNumber}</span>
-              </span>
-            </div>
+        {/* Quick Menu Bar (Gear, Skills, Shop, Log) — Placed at Top Center so Bottom Thumb Zones Never Collide */}
+        <div className="pointer-events-auto flex items-center justify-center gap-1.5 flex-wrap">
+          <button
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              soundEngine.haptic(15);
+              onOpenInventory();
+            }}
+            className="min-h-[32px] flex items-center gap-1 px-2.5 py-1 bg-stone-950/90 border border-stone-800 active:border-amber-500 active:scale-95 text-stone-200 rounded-xl text-[11px] font-semibold shadow-lg cursor-pointer"
+            title="Open Inventory [I]"
+          >
+            <span>🎒</span>
+            <span>Gear</span>
+            <span className="text-[10px] font-mono-stat text-stone-400 tabular-nums">
+              {player.inventory.length}/{player.maxInventorySize}
+            </span>
+          </button>
 
-            <div className="flex items-center justify-end gap-1 mt-1">
-              <button
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  soundEngine.haptic(15);
-                  setShowSettings((s) => !s);
-                }}
-                className="min-h-[28px] px-1.5 py-0.5 rounded bg-stone-900 border border-stone-800 hover:border-amber-500 text-stone-300 text-[9px] font-mono-stat font-semibold active:scale-95 cursor-pointer"
-                title="Controller Settings"
-              >
-                🕹️ {controllerSize.toUpperCase()}
-              </button>
-              <button
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  soundEngine.haptic(15);
-                  soundEngine.toggleMute();
-                }}
-                className="w-7 h-7 rounded bg-stone-900 border border-stone-800 text-stone-300 flex items-center justify-center text-xs active:scale-95 cursor-pointer"
-                title="Toggle Audio"
-              >
-                {soundEngine.getMuted() ? '🔇' : '🔊'}
-              </button>
-              <button
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  soundEngine.haptic(15);
-                  onTogglePause();
-                }}
-                className="w-7 h-7 rounded bg-stone-900 border border-stone-800 text-stone-300 flex items-center justify-center text-xs active:scale-95 cursor-pointer"
-                title="Pause [Esc]"
-              >
-                ⏸️
-              </button>
-            </div>
-          </div>
+          <button
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              soundEngine.haptic(15);
+              onOpenSkillTree();
+            }}
+            className={`min-h-[32px] relative flex items-center gap-1 px-2.5 py-1 bg-stone-950/90 border rounded-xl text-[11px] font-semibold shadow-lg active:scale-95 cursor-pointer ${
+              player.stats.skillPoints > 0
+                ? 'border-amber-500 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.35)]'
+                : 'border-stone-800 text-stone-200'
+            }`}
+            title="Open Skill Tree [K]"
+          >
+            <span>✨</span>
+            <span>Skills</span>
+            {player.stats.skillPoints > 0 && (
+              <span className="px-1.5 py-0.2 bg-amber-500 text-stone-950 font-bold rounded-full text-[9px] animate-pulse">
+                +{player.stats.skillPoints}
+              </span>
+            )}
+          </button>
 
-          {/* Interactive Corner Mini-Map & Zoom Cluster */}
-          <div className="bg-stone-950/95 border border-stone-800 rounded-xl p-1 shadow-2xl backdrop-blur-md flex flex-col items-center">
-            <div
+          {isNearMerchant && onOpenMerchant && (
+            <button
               onPointerDown={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                soundEngine.haptic(15);
-                setIsMiniMapExpanded((prev) => !prev);
+                soundEngine.haptic(25);
+                onOpenMerchant();
               }}
-              className="relative rounded-lg overflow-hidden border border-stone-800 cursor-pointer"
-              title="Tap to expand/collapse Mini-Map"
+              className="min-h-[32px] flex items-center gap-1 px-2.5 py-1 bg-emerald-950/95 border border-emerald-400 text-emerald-300 rounded-xl text-[11px] font-cinzel font-bold shadow-[0_0_16px_rgba(16,185,129,0.45)] animate-pulse active:scale-95 cursor-pointer"
             >
-              <canvas
-                ref={miniMapCanvasRef}
-                className="block"
-                style={{
-                  width: isMiniMapExpanded ? 160 : 72,
-                  height: isMiniMapExpanded ? 160 : 72,
-                }}
-              />
-              <span className="absolute bottom-0.5 right-0.5 text-[8px] font-mono-stat text-stone-400 bg-black/75 px-1 rounded">
-                {isMiniMapExpanded ? '✕' : '🗺️'}
-              </span>
-            </div>
+              <span>⚖️</span>
+              <span>Shop</span>
+            </button>
+          )}
 
-            <div className="flex items-center justify-between w-full gap-1 mt-1">
-              <button
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  soundEngine.haptic(12);
-                  onZoomChange(-6);
-                }}
-                className="flex-1 py-0.5 rounded bg-stone-900 border border-stone-800 text-[9px] font-mono-stat text-stone-300 active:scale-95 cursor-pointer"
-                title="Zoom Out"
-              >
-                -
-              </button>
-              <button
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  soundEngine.haptic(12);
-                  onZoomChange(6);
-                }}
-                className="flex-1 py-0.5 rounded bg-stone-900 border border-stone-800 text-[9px] font-mono-stat text-stone-300 active:scale-95 cursor-pointer"
-                title="Zoom In"
-              >
-                +
-              </button>
-            </div>
-          </div>
+          <button
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              soundEngine.haptic(15);
+              onOpenCombatLog();
+            }}
+            className={`min-h-[32px] px-2.5 py-1 bg-stone-950/90 border rounded-xl text-[11px] font-semibold shadow-lg active:scale-95 cursor-pointer flex items-center gap-1 ${
+              isCombatLogOpen ? 'border-amber-500 text-amber-400' : 'border-stone-800 text-stone-300'
+            }`}
+            title="Toggle Log [L]"
+          >
+            <span>📜</span>
+            <span>Log</span>
+          </button>
         </div>
       </div>
 
-      {/* Controller Mode & Size Configuration Popover */}
+      {/* Controller Mode, Size & App Mode Configuration Popover */}
       {showSettings && (
         <div className="pointer-events-auto mx-auto bg-stone-950/95 border border-amber-500/80 p-3 rounded-2xl shadow-2xl z-30 flex flex-col gap-2.5 max-w-[92vw]">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-3">
             <span className="font-cinzel text-xs font-bold text-amber-400">Controller Type:</span>
             <div className="flex gap-1.5">
               <button
@@ -619,7 +702,7 @@ export const HUD: React.FC<HUDProps> = ({
                   e.preventDefault();
                   handleSetMode('joystick');
                 }}
-                className={`px-3 py-1 text-xs font-mono-stat font-bold rounded-lg transition-all cursor-pointer ${
+                className={`px-2.5 py-1 text-xs font-mono-stat font-bold rounded-lg transition-all cursor-pointer ${
                   controllerMode === 'joystick'
                     ? 'bg-amber-500 text-stone-950 shadow-[0_0_10px_rgba(245,158,11,0.5)]'
                     : 'bg-stone-900 border border-stone-800 text-stone-400'
@@ -632,7 +715,7 @@ export const HUD: React.FC<HUDProps> = ({
                   e.preventDefault();
                   handleSetMode('dpad');
                 }}
-                className={`px-3 py-1 text-xs font-mono-stat font-bold rounded-lg transition-all cursor-pointer ${
+                className={`px-2.5 py-1 text-xs font-mono-stat font-bold rounded-lg transition-all cursor-pointer ${
                   controllerMode === 'dpad'
                     ? 'bg-amber-500 text-stone-950 shadow-[0_0_10px_rgba(245,158,11,0.5)]'
                     : 'bg-stone-900 border border-stone-800 text-stone-400'
@@ -652,7 +735,7 @@ export const HUD: React.FC<HUDProps> = ({
             </button>
           </div>
 
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-3">
             <span className="font-cinzel text-xs font-bold text-amber-400">Controller Size:</span>
             <div className="flex gap-1.5">
               {(['standard', 'large', 'xl'] as ControllerSize[]).map((size) => (
@@ -662,7 +745,7 @@ export const HUD: React.FC<HUDProps> = ({
                     e.preventDefault();
                     handleSetSize(size);
                   }}
-                  className={`px-3 py-1 text-xs font-mono-stat font-bold rounded-lg uppercase transition-all cursor-pointer ${
+                  className={`px-2.5 py-1 text-xs font-mono-stat font-bold rounded-lg uppercase transition-all cursor-pointer ${
                     controllerSize === size
                       ? 'bg-amber-500 text-stone-950 shadow-[0_0_10px_rgba(245,158,11,0.5)]'
                       : 'bg-stone-900 border border-stone-800 text-stone-400'
@@ -672,6 +755,11 @@ export const HUD: React.FC<HUDProps> = ({
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 pt-1 border-t border-stone-800">
+            <span className="font-cinzel text-xs font-bold text-stone-300">Mobile App Mode:</span>
+            <PWAInstallButton compact onLaunchAppPlay={() => setShowSettings(false)} />
           </div>
         </div>
       )}
@@ -700,82 +788,8 @@ export const HUD: React.FC<HUDProps> = ({
           Right Thumb: Simultaneous Multi-Touch Strike, Wait & Skill Hotbar
           ========================================================================= */}
       <div className="w-full flex justify-between items-end gap-2 pt-1">
-        {/* LEFT SIDE: QUICK MENU PILLS + ANALOG THUMBSTICK / D-PAD */}
-        <div className="flex flex-col items-start gap-2">
-          {/* Compact Utility Pills (Gear, Skills, Shop, Log) */}
-          <div className="pointer-events-auto flex items-center gap-1.5">
-            <button
-              onPointerDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                soundEngine.haptic(15);
-                onOpenInventory();
-              }}
-              className="min-h-[38px] flex items-center gap-1 px-2.5 py-1.5 bg-stone-950/90 border border-stone-800 active:border-amber-500 active:scale-95 text-stone-200 rounded-xl text-xs font-semibold shadow-lg cursor-pointer"
-              title="Open Inventory [I]"
-            >
-              <span>🎒</span>
-              <span className="hidden xs:inline">Gear</span>
-              <span className="text-[10px] font-mono-stat text-stone-400 tabular-nums">
-                {player.inventory.length}/{player.maxInventorySize}
-              </span>
-            </button>
-
-            <button
-              onPointerDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                soundEngine.haptic(15);
-                onOpenSkillTree();
-              }}
-              className={`min-h-[38px] relative flex items-center gap-1 px-2.5 py-1.5 bg-stone-950/90 border rounded-xl text-xs font-semibold shadow-lg active:scale-95 cursor-pointer ${
-                player.stats.skillPoints > 0
-                  ? 'border-amber-500 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.35)]'
-                  : 'border-stone-800 text-stone-200'
-              }`}
-              title="Open Skill Tree [K]"
-            >
-              <span>✨</span>
-              <span>Skills</span>
-              {player.stats.skillPoints > 0 && (
-                <span className="px-1.5 py-0.2 bg-amber-500 text-stone-950 font-bold rounded-full text-[10px] animate-pulse">
-                  +{player.stats.skillPoints}
-                </span>
-              )}
-            </button>
-
-            {isNearMerchant && onOpenMerchant && (
-              <button
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  soundEngine.haptic(25);
-                  onOpenMerchant();
-                }}
-                className="min-h-[38px] flex items-center gap-1 px-2.5 py-1.5 bg-emerald-950/95 border border-emerald-400 text-emerald-300 rounded-xl text-xs font-cinzel font-bold shadow-[0_0_16px_rgba(16,185,129,0.45)] animate-pulse active:scale-95 cursor-pointer"
-              >
-                <span>⚖️</span>
-                <span>Shop</span>
-              </button>
-            )}
-
-            <button
-              onPointerDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                soundEngine.haptic(15);
-                onOpenCombatLog();
-              }}
-              className={`min-h-[38px] min-w-[38px] px-2 py-1.5 bg-stone-950/90 border rounded-xl text-xs shadow-lg active:scale-95 cursor-pointer flex items-center justify-center ${
-                isCombatLogOpen ? 'border-amber-500 text-amber-400' : 'border-stone-800 text-stone-300'
-              }`}
-              title="Toggle Log [L]"
-            >
-              📜
-            </button>
-          </div>
-
-          {/* VIRTUAL ANALOG THUMBSTICK (JOYSTICK) OR 8-WAY D-PAD */}
+        {/* LEFT SIDE: ANALOG THUMBSTICK OR 8-WAY D-PAD */}
+        <div className="flex flex-col items-start shrink-0">
           {controllerMode === 'joystick' ? (
             <div
               ref={joystickBaseRef}
@@ -787,7 +801,7 @@ export const HUD: React.FC<HUDProps> = ({
                 width: joyMetrics.baseSize,
                 height: joyMetrics.baseSize,
               }}
-              className={`pointer-events-auto relative rounded-full bg-stone-950/85 border-2 transition-colors duration-150 shadow-[0_0_30px_rgba(0,0,0,0.85)] backdrop-blur-md flex items-center justify-center touch-none cursor-grab active:cursor-grabbing ml-1 mb-0.5 ${
+              className={`pointer-events-auto relative rounded-full bg-stone-950/85 border-2 transition-colors duration-150 shadow-[0_0_30px_rgba(0,0,0,0.85)] backdrop-blur-md flex items-center justify-center touch-none cursor-grab active:cursor-grabbing ml-0.5 mb-0.5 ${
                 joystickActive
                   ? 'border-amber-500/80 shadow-[0_0_24px_rgba(245,158,11,0.3)]'
                   : 'border-stone-700/80'
@@ -802,7 +816,7 @@ export const HUD: React.FC<HUDProps> = ({
                 const isOctantActive =
                   activeOctant && activeOctant.dx === dir.dx && activeOctant.dy === dir.dy;
                 const rad = (dir.angleDeg * Math.PI) / 180;
-                const rimRadius = joyMetrics.baseSize / 2 - 12;
+                const rimRadius = joyMetrics.baseSize / 2 - 11;
                 const lx = Math.cos(rad) * rimRadius;
                 const ly = Math.sin(rad) * rimRadius;
 
@@ -812,7 +826,7 @@ export const HUD: React.FC<HUDProps> = ({
                     style={{
                       transform: `translate(${lx}px, ${ly}px)`,
                     }}
-                    className={`absolute text-[10px] font-bold pointer-events-none transition-all duration-75 ${
+                    className={`absolute text-[9px] font-bold pointer-events-none transition-all duration-75 ${
                       isOctantActive
                         ? 'text-amber-400 scale-125 drop-shadow-[0_0_6px_rgba(245,158,11,0.9)]'
                         : 'text-stone-600'
@@ -829,7 +843,9 @@ export const HUD: React.FC<HUDProps> = ({
                   width: joyMetrics.knobSize,
                   height: joyMetrics.knobSize,
                   transform: `translate3d(${knobPos.x}px, ${knobPos.y}px, 0)`,
-                  transition: joystickActive ? 'none' : 'transform 140ms cubic-bezier(0.22, 1, 0.36, 1)',
+                  transition: joystickActive
+                    ? 'none'
+                    : 'transform 140ms cubic-bezier(0.22, 1, 0.36, 1)',
                 }}
                 className={`rounded-full pointer-events-none flex items-center justify-center border-2 shadow-2xl ${
                   joystickActive
@@ -837,7 +853,6 @@ export const HUD: React.FC<HUDProps> = ({
                     : 'bg-gradient-to-b from-stone-700 via-stone-800 to-stone-900 border-stone-500/80'
                 }`}
               >
-                {/* Inner Grip Texture on Thumbstick */}
                 <div
                   className={`w-3/5 h-3/5 rounded-full border flex items-center justify-center ${
                     joystickActive
@@ -861,7 +876,7 @@ export const HUD: React.FC<HUDProps> = ({
               onPointerUp={resetJoystick}
               onPointerCancel={resetJoystick}
               onPointerLeave={resetJoystick}
-              className="pointer-events-auto grid grid-cols-3 gap-1 bg-stone-950/90 border border-stone-800/90 p-1.5 rounded-2xl shadow-2xl backdrop-blur-md touch-none"
+              className="pointer-events-auto grid grid-cols-3 gap-1 bg-stone-950/90 border border-stone-800/90 p-1 rounded-2xl shadow-2xl backdrop-blur-md touch-none"
             >
               <button
                 onPointerDown={(e) => startDpadHoldMove(-1, -1, e)}
@@ -891,8 +906,8 @@ export const HUD: React.FC<HUDProps> = ({
                 onPointerDown={handleWaitPointerDown}
                 className={`${sizeClasses.dpadBtn} rounded-xl bg-stone-900 border border-stone-800 active:bg-amber-600/40 text-stone-300 flex flex-col items-center justify-center cursor-pointer`}
               >
-                <span className="leading-none text-sm">⏳</span>
-                <span className="text-[8px] font-mono-stat uppercase">Rest</span>
+                <span className="leading-none text-xs">⏳</span>
+                <span className="text-[7px] font-mono-stat uppercase">Rest</span>
               </button>
               <button
                 onPointerDown={(e) => startDpadHoldMove(1, 0, e)}
@@ -923,9 +938,9 @@ export const HUD: React.FC<HUDProps> = ({
         </div>
 
         {/* RIGHT SIDE: MULTI-TOUCH SKILL HOTBAR + WAIT & PRIMARY STRIKE CLUSTER */}
-        <div className="pointer-events-auto flex flex-col items-end gap-2 touch-none">
+        <div className="pointer-events-auto flex flex-col items-end gap-1.5 touch-none shrink-0">
           {/* Active Skills Row (Multi-touch onPointerDown ready) */}
-          <div className="flex items-center gap-1.5 bg-stone-950/90 border border-stone-800/90 p-1 rounded-xl shadow-xl backdrop-blur-sm">
+          <div className="flex items-center gap-1 bg-stone-950/90 border border-stone-800/90 p-1 rounded-xl shadow-xl backdrop-blur-sm">
             {[0, 1, 2, 3].map((idx) => {
               const skill = activeSkills[idx];
               const cooldown = skill ? player.activeSkillCooldowns[skill.id] || 0 : 0;
@@ -962,22 +977,22 @@ export const HUD: React.FC<HUDProps> = ({
                   {skill ? (
                     <>
                       <span className="leading-none">{skill.icon}</span>
-                      <span className="text-[9px] font-mono-stat text-sky-400 leading-none mt-0.5 font-bold">
+                      <span className="text-[8px] font-mono-stat text-sky-400 leading-none mt-0.5 font-bold">
                         {effectiveManaCost ? `${effectiveManaCost}m` : ''}
                       </span>
 
-                      <span className="absolute -top-1.5 left-0.5 bg-stone-950 text-[8px] font-mono-stat px-1 rounded text-stone-300 border border-stone-800">
+                      <span className="absolute -top-1 left-0.5 bg-stone-950 text-[7px] font-mono-stat px-1 rounded text-stone-300 border border-stone-800">
                         {idx + 1}
                       </span>
 
                       {cooldown > 0 && (
-                        <div className="absolute inset-0 bg-stone-950/85 rounded-lg flex items-center justify-center font-mono-stat font-bold text-sm text-amber-400">
+                        <div className="absolute inset-0 bg-stone-950/85 rounded-lg flex items-center justify-center font-mono-stat font-bold text-xs text-amber-400">
                           {cooldown}
                         </div>
                       )}
                     </>
                   ) : (
-                    <span className="text-stone-700 text-xs font-mono-stat">{idx + 1}</span>
+                    <span className="text-stone-700 text-[10px] font-mono-stat">{idx + 1}</span>
                   )}
                 </button>
               );
@@ -985,7 +1000,7 @@ export const HUD: React.FC<HUDProps> = ({
           </div>
 
           {/* Right Thumb Action Buttons: Wait + Primary Strike */}
-          <div className="flex items-end gap-2.5 pr-1 pb-0.5">
+          <div className="flex items-end gap-2 pr-0.5 pb-0.5">
             {/* Secondary Wait / Rest Button */}
             <button
               onPointerDown={handleWaitPointerDown}
@@ -993,7 +1008,7 @@ export const HUD: React.FC<HUDProps> = ({
               title="Rest 1 Turn [Space]"
             >
               <span className="leading-none">⏳</span>
-              <span className="text-[8px] font-mono-stat text-stone-400 font-bold uppercase mt-0.5">
+              <span className="text-[7px] font-mono-stat text-stone-400 font-bold uppercase mt-0.5">
                 Wait
               </span>
             </button>
@@ -1012,7 +1027,7 @@ export const HUD: React.FC<HUDProps> = ({
               title="Strike / Interact (Multi-Touch Ready)"
             >
               <span className="leading-none filter drop-shadow">⚔️</span>
-              <span className="text-[10px] font-cinzel font-black tracking-wider uppercase text-stone-950 leading-none mt-1">
+              <span className="text-[9px] font-cinzel font-black tracking-wider uppercase text-stone-950 leading-none mt-0.5">
                 Strike
               </span>
             </button>

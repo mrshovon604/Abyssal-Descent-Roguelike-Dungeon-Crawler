@@ -319,4 +319,14 @@ export interface RunHistoryRecord {
   won: boolean;
 }
 
+export interface SavedRunState {
+  version: number;
+  savedAt: string;
+  floor: DungeonFloor;
+  player: Player;
+  turnNumber: number;
+  monstersKilled: number;
+  combatLog: CombatLogEntry[];
+}
+
 export type GameScreen = 'title' | 'playing' | 'paused' | 'game_over' | 'victory';

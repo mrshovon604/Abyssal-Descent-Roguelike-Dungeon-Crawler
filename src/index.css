@@ -16,7 +16,7 @@
     font-family: var(--font-sans);
     user-select: none;
     -webkit-user-select: none;
-    touch-action: none;
+    touch-action: manipulation;
     overscroll-behavior: none;
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;

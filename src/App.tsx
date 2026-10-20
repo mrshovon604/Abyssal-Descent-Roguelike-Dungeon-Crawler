@@ -14,6 +14,7 @@ import {
   Particle,
   Player,
   ProjectileEffect,
+  SavedRunState,
   SlashEffect,
 } from './types/game';
 import { generateDungeonFloor, updateFieldOfView } from './dungeon/dungeonGenerator';
@@ -36,6 +37,7 @@ import { CombatLog } from './components/CombatLog';
 import { GameOverModal } from './components/GameOverModal';
 import { VictoryModal } from './components/VictoryModal';
 import { PauseModal } from './components/PauseModal';
+import { OfflineIndicator } from './components/PWAInstallButton';
 
 export default function App() {
   const [screen, setScreen] = useState<GameScreen>('title');
@@ -73,6 +75,31 @@ export default function App() {
   // Trigger re-render of HUD when needed
   const [, setHudTick] = useState(0);
   const triggerHud = () => setHudTick((t) => t + 1);
+
+  const saveCurrentRun = useCallback(
+    (nextTurn?: number, nextKills?: number) => {
+      if (!floorRef.current || !playerRef.current || playerRef.current.stats.hp <= 0) return;
+      try {
+        const snapshot: SavedRunState = {
+          version: 1,
+          savedAt: new Date().toISOString(),
+          floor: floorRef.current,
+          player: playerRef.current,
+          turnNumber: nextTurn ?? turnNumber,
+          monstersKilled: nextKills ?? monstersKilled,
+          combatLog: combatLogRef.current.slice(-40),
+        };
+        localStorage.setItem('abyssal_saved_run', JSON.stringify(snapshot));
+      } catch {}
+    },
+    [turnNumber, monstersKilled]
+  );
+
+  const clearSavedRun = useCallback(() => {
+    try {
+      localStorage.removeItem('abyssal_saved_run');
+    } catch {}
+  }, []);
 
   const showFloorArrivalBanner = useCallback((floor: DungeonFloor) => {
     if (bannerTimeoutRef.current) {
@@ -251,10 +278,56 @@ export default function App() {
       setIsSkillTreeOpen(false);
       setIsMerchantOpen(false);
       showFloorArrivalBanner(newFloor);
+      saveCurrentRun(1, 0);
       triggerHud();
     },
-    [logCombat, showFloorArrivalBanner]
+    [logCombat, showFloorArrivalBanner, saveCurrentRun]
   );
+
+  // Resume an auto-saved game run from localStorage
+  const handleContinueGame = useCallback(
+    (saved: SavedRunState) => {
+      floorRef.current = saved.floor;
+      playerRef.current = saved.player;
+      slashesRef.current = [];
+      projectilesRef.current = [];
+      setTurnNumber(saved.turnNumber || 1);
+      setMonstersKilled(saved.monstersKilled || 0);
+      combatLogRef.current = saved.combatLog || [];
+      setCombatLogList([...combatLogRef.current]);
+
+      updateFieldOfView(saved.floor, saved.player.x, saved.player.y, saved.player.visionRange);
+      setScreen('playing');
+      setIsInventoryOpen(false);
+      setIsSkillTreeOpen(false);
+      setIsMerchantOpen(false);
+      showFloorArrivalBanner(saved.floor);
+      triggerHud();
+    },
+    [showFloorArrivalBanner]
+  );
+
+  // If opened in standalone App Mode (?app=1 or display-mode: standalone) with a saved run, auto-resume once
+  const hasCheckedStandaloneAutoResumeRef = useRef(false);
+  useEffect(() => {
+    if (hasCheckedStandaloneAutoResumeRef.current) return;
+    hasCheckedStandaloneAutoResumeRef.current = true;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const isStandaloneLaunch =
+        params.get('app') === '1' ||
+        window.matchMedia('(display-mode: standalone)').matches;
+      if (isStandaloneLaunch) {
+        const rawRun = localStorage.getItem('abyssal_saved_run');
+        if (rawRun) {
+          const parsed: SavedRunState = JSON.parse(rawRun);
+          if (parsed && parsed.player && parsed.floor && parsed.player.stats.hp > 0) {
+            handleContinueGame(parsed);
+          }
+        }
+      }
+    } catch {}
+  }, [handleContinueGame]);
 
   // Descend to next dungeon depth
   const handleDescendFloor = useCallback(() => {
@@ -280,8 +353,9 @@ export default function App() {
 
     awardXpAndCheckLevel(playerRef.current, 15 * nextFloorNum, addFloatingText, logCombat);
     showFloorArrivalBanner(newFloor);
+    saveCurrentRun();
     triggerHud();
-  }, [addFloatingText, logCombat, showFloorArrivalBanner]);
+  }, [addFloatingText, logCombat, showFloorArrivalBanner, saveCurrentRun]);
 
   // Complete a turn and advance game state
   const advanceTurn = useCallback(() => {
@@ -341,15 +415,28 @@ export default function App() {
 
     // 5. Check Player Death
     if (player.stats.hp <= 0) {
+      clearSavedRun();
       soundEngine.playDeath();
       setCauseOfDeath('Fatal wounds inflicted in combat');
       setScreen('game_over');
       return;
     }
 
-    setTurnNumber((t) => t + 1);
+    const nextTurn = turnNumber + 1;
+    setTurnNumber(nextTurn);
+    saveCurrentRun(nextTurn, monstersKilled + defeatedCount);
     triggerHud();
-  }, [turnNumber, addFloatingText, logCombat, spawnParticles, spawnSlash, spawnProjectile]);
+  }, [
+    turnNumber,
+    monstersKilled,
+    addFloatingText,
+    logCombat,
+    spawnParticles,
+    spawnSlash,
+    spawnProjectile,
+    clearSavedRun,
+    saveCurrentRun,
+  ]);
 
   // Attempt to move player or attack adjacent monster
   // Returns true if hold-to-move can safely continue, false if it should halt
@@ -398,6 +485,7 @@ export default function App() {
 
           // Check if Boss killed on floor 10
           if (enemy.archetype === 'boss' && floor.floorNumber >= 10) {
+            clearSavedRun();
             setScreen('victory');
             return false;
           }
@@ -612,6 +700,7 @@ export default function App() {
         setMonstersKilled((k) => k + 1);
 
         if (targetEnemy.archetype === 'boss' && floor.floorNumber >= 10) {
+          clearSavedRun();
           setScreen('victory');
           return;
         }
@@ -1151,6 +1240,7 @@ export default function App() {
       player.equipment[targetSlot] = item;
       soundEngine.playAttack();
       logCombat(`Equipped: ${item.name}`, 'loot');
+      saveCurrentRun();
       triggerHud();
     }
   };
@@ -1163,6 +1253,7 @@ export default function App() {
       player.equipment[slot] = null;
       player.inventory.push(item);
       logCombat(`Unequipped: ${item.name}`, 'system');
+      saveCurrentRun();
       triggerHud();
     }
   };
@@ -1223,6 +1314,7 @@ export default function App() {
     if (!playerRef.current) return;
     playerRef.current.inventory = playerRef.current.inventory.filter((i) => i.id !== item.id);
     logCombat(`Discarded ${item.name}.`, 'system');
+    saveCurrentRun();
     triggerHud();
   };
 
@@ -1243,6 +1335,7 @@ export default function App() {
     soundEngine.playChest();
     addFloatingText(`Bought ${item.name}`, player.x, player.y - 0.5, '#10b981');
     logCombat(`🛒 Purchased ${item.name} from the Peddler for ${item.goldValue} Gold.`, 'loot');
+    saveCurrentRun();
     triggerHud();
   };
 
@@ -1255,6 +1348,7 @@ export default function App() {
     soundEngine.playChest();
     addFloatingText(`+${value} 🪙`, player.x, player.y - 0.5, '#fbbf24');
     logCombat(`🪙 Sold ${item.name} for ${value} Gold.`, 'loot');
+    saveCurrentRun();
     triggerHud();
   };
 
@@ -1266,6 +1360,7 @@ export default function App() {
       player.stats.skillPoints -= node.cost;
       player.unlockedSkills.push(skillId);
       logCombat(`✨ Mastered new skill: ${node.name}!`, 'level_up');
+      saveCurrentRun();
       triggerHud();
     }
   };
@@ -1275,9 +1370,14 @@ export default function App() {
     floorRef.current.tiles[floorRef.current.merchantPos.y]?.[floorRef.current.merchantPos.x]?.merchant;
 
   return (
-    <div className="relative w-full h-[100dvh] overflow-hidden bg-stone-950 text-stone-100 select-none touch-none">
+    <div className="relative w-full h-[100dvh] overflow-hidden bg-stone-950 text-stone-100 select-none">
+      {/* Offline Connectivity Indicator */}
+      <OfflineIndicator />
+
       {/* Title Screen State */}
-      {screen === 'title' && <TitleScreen onStartGame={handleStartGame} />}
+      {screen === 'title' && (
+        <TitleScreen onStartGame={handleStartGame} onContinueGame={handleContinueGame} />
+      )}
 
       {/* Main Game Canvas (always mounted for zero-glitch state preservation) */}
       <canvas
@@ -1287,16 +1387,16 @@ export default function App() {
         onTouchStart={handleCanvasTouchStart}
         onTouchMove={handleCanvasTouchMove}
         onTouchEnd={handleCanvasTouchEnd}
-        className={`absolute inset-0 cursor-crosshair ${screen !== 'title' ? 'block' : 'hidden'}`}
+        className={`absolute inset-0 cursor-crosshair touch-none ${screen !== 'title' ? 'block' : 'hidden'}`}
       />
 
       {/* Floor Arrival & Special Event Atmospheric Banner */}
       {screen === 'playing' && floorBanner && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex flex-col items-center bg-stone-950/95 border border-amber-500/60 px-5 py-2.5 rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.85)] backdrop-blur-md text-center max-w-[90vw]">
-          <div className="font-cinzel text-sm sm:text-base font-bold text-amber-400 tracking-wide">
+        <div className="fixed top-28 sm:top-24 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex flex-col items-center bg-stone-950/95 border border-amber-500/60 px-4 py-2 rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.85)] backdrop-blur-md text-center max-w-[90vw]">
+          <div className="font-cinzel text-xs sm:text-sm font-bold text-amber-400 tracking-wide">
             {floorBanner.title}
           </div>
-          <div className="flex items-center gap-1.5 mt-1 text-xs">
+          <div className="flex items-center gap-1.5 mt-0.5 text-[11px] sm:text-xs">
             <span>{floorBanner.eventIcon}</span>
             <span className="font-cinzel font-bold" style={{ color: floorBanner.eventColor }}>
               {floorBanner.eventName}:
