@@ -314,10 +314,12 @@ export default function App() {
       playerRef.current = saved.player;
       slashesRef.current = [];
       projectilesRef.current = [];
+      setCurrentDungeonId(saved.dungeonId || 1);
       setTurnNumber(saved.turnNumber || 1);
       setMonstersKilled(saved.monstersKilled || 0);
       combatLogRef.current = saved.combatLog || [];
       setCombatLogList([...combatLogRef.current]);
+      if (rendererRef.current) rendererRef.current.resetPositions();
 
       updateFieldOfView(saved.floor, saved.player.x, saved.player.y, saved.player.visionRange);
       setScreen('playing');
