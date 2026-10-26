@@ -39,6 +39,7 @@ import { VictoryModal } from './components/VictoryModal';
 import { PauseModal } from './components/PauseModal';
 import { SettingsModal } from './components/SettingsModal';
 import { OfflineIndicator } from './components/PWAInstallButton';
+import { DungeonSelectScreen } from './components/DungeonSelectScreen';
 
 export default function App() {
   const [screen, setScreen] = useState<GameScreen>('title');
@@ -49,6 +50,13 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [turnNumber, setTurnNumber] = useState(1);
   const [monstersKilled, setMonstersKilled] = useState(0);
+  const [currentDungeonId, setCurrentDungeonId] = useState(1);
+  const [highestDungeonCleared, setHighestDungeonCleared] = useState(() => {
+    try {
+      return parseInt(localStorage.getItem('abyssal_highest_dungeon') || '0', 10);
+    } catch { return 0; }
+  });
+  const selectedClassRef = useRef<'warrior' | 'mage' | 'rogue'>('warrior');
   const [causeOfDeath, setCauseOfDeath] = useState('Slain in the Abyss');
   const [floorBanner, setFloorBanner] = useState<{
     title: string;
@@ -85,6 +93,7 @@ export default function App() {
         const snapshot: SavedRunState = {
           version: 1,
           savedAt: new Date().toISOString(),
+          dungeonId: currentDungeonId,
           floor: floorRef.current,
           player: playerRef.current,
           turnNumber: nextTurn ?? turnNumber,
