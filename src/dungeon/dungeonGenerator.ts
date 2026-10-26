@@ -622,7 +622,7 @@ export function createBoss(x: number, y: number, floor: number, dungeonId: numbe
       maxHp: Math.round(140 * ds),
       attack: Math.round(19 * ds),
       defense: Math.round(7 * ds),
-      xpReward: 220,
+      xpReward: Math.round(220 * ds),
       color: '#eab308',
       symbol: '💀',
       isBoss: true,
