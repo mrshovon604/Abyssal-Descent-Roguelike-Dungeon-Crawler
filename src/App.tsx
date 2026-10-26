@@ -103,7 +103,7 @@ export default function App() {
         localStorage.setItem('abyssal_saved_run', JSON.stringify(snapshot));
       } catch {}
     },
-    [turnNumber, monstersKilled]
+    [turnNumber, monstersKilled, currentDungeonId]
   );
 
   const clearSavedRun = useCallback(() => {
