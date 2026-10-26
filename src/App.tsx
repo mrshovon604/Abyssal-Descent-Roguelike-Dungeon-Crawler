@@ -810,7 +810,7 @@ export default function App() {
     spawnParticles(targetX, targetY, '#f59e0b', 5);
     logCombat('You swing your weapon into the gloom.', 'system');
     advanceTurn();
-  }, [screen, addFloatingText, logCombat, spawnParticles, spawnSlash, advanceTurn, handlePlayerMove]);
+  }, [screen, addFloatingText, logCombat, spawnParticles, spawnSlash, advanceTurn, handlePlayerMove, clearSavedRun, currentDungeonId, highestDungeonCleared]);
 
   // Cast active skill
   const handleExecuteSkill = useCallback(
