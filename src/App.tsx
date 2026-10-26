@@ -289,7 +289,7 @@ export default function App() {
       setCombatLogList([]);
       if (rendererRef.current) rendererRef.current.resetPositions();
 
-      logCombat('You descend into the depths of the Forgotten Catacombs...', 'system');
+      logCombat(`You descend into ${getDungeonById(dungeonId).name}...`, 'system');
       if (newFloor.floorEvent.type !== 'none') {
         logCombat(
           `${newFloor.floorEvent.icon} Floor Event — ${newFloor.floorEvent.name}: ${newFloor.floorEvent.description}`,
