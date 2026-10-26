@@ -1606,6 +1606,7 @@ export default function App() {
           turnNumber={turnNumber}
           monstersKilled={monstersKilled}
           onRestart={() => handleStartGame('warrior')}
+          onReturnToSelect={() => setScreen('dungeon_select')}
         />
       )}
     </div>
