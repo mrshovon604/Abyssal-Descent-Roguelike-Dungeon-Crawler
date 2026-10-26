@@ -110,7 +110,6 @@ export function generateDungeonFloor(floorNumber: number, dungeonId: number = 1)
   const height = 44;
   const theme = getThemeForFloor(floorNumber, dungeonId);
   const floorEvent = rollFloorEvent(floorNumber);
-  const diffScale = getDifficultyScale(dungeonId, floorNumber);
 
   // Initialize tile grid filled with walls
   const tiles: Tile[][] = [];
