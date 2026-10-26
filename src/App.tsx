@@ -1484,7 +1484,7 @@ export default function App() {
         onTouchStart={handleCanvasTouchStart}
         onTouchMove={handleCanvasTouchMove}
         onTouchEnd={handleCanvasTouchEnd}
-        className={`absolute inset-0 cursor-crosshair touch-none ${screen !== 'title' ? 'block' : 'hidden'}`}
+        className={`absolute inset-0 cursor-crosshair touch-none ${screen === 'playing' || screen === 'paused' || screen === 'game_over' || screen === 'victory' ? 'block' : 'hidden'}`}
       />
 
       {/* Floor Arrival & Special Event Atmospheric Banner */}
