@@ -116,8 +116,9 @@ export default function App() {
     if (bannerTimeoutRef.current) {
       window.clearTimeout(bannerTimeoutRef.current);
     }
+    const dungeonName = floor.dungeonId > 1 ? ` — Dungeon ${floor.dungeonId}` : '';
     setFloorBanner({
-      title: `Depth ${floor.floorNumber}F · ${floor.theme.name}`,
+      title: `Depth ${floor.floorNumber}F · ${floor.theme.name}${dungeonName}`,
       eventIcon: floor.floorEvent.icon,
       eventName: floor.floorEvent.name,
       eventDesc: floor.floorEvent.description,
