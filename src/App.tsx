@@ -525,6 +525,11 @@ export default function App() {
           // Check if Boss killed on floor 10
           if (enemy.archetype === 'boss' && floor.floorNumber >= 10) {
             clearSavedRun();
+            const dId = floor.dungeonId || currentDungeonId;
+            if (dId > highestDungeonCleared) {
+              setHighestDungeonCleared(dId);
+              try { localStorage.setItem('abyssal_highest_dungeon', String(dId)); } catch {}
+            }
             setScreen('victory');
             return false;
           }
