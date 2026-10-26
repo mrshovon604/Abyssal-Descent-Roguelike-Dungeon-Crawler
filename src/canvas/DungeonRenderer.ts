@@ -27,6 +27,12 @@ export class DungeonRenderer {
   public screenShake: number = 0;
   public hitFlashTimer: number = 0;
 
+  // Smooth movement animation state
+  private playerRenderX: number = -1;
+  private playerRenderY: number = -1;
+  private enemyRenderPositions: Map<string, { rx: number; ry: number }> = new Map();
+  private readonly MOVE_LERP_SPEED = 14; // tiles per second interpolation speed
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     const context = canvas.getContext('2d');
@@ -77,8 +83,41 @@ export class DungeonRenderer {
     }
 
     // Camera smoothly lerps to center on player
-    this.targetCameraX = player.x * this.tileSize + this.tileSize / 2 - width / 2;
-    this.targetCameraY = player.y * this.tileSize + this.tileSize / 2 - height / 2;
+    // Update smooth render positions
+    if (this.playerRenderX < 0) {
+      this.playerRenderX = player.x;
+      this.playerRenderY = player.y;
+    } else {
+      const lerpFactor = Math.min(1, dt * this.MOVE_LERP_SPEED);
+      this.playerRenderX += (player.x - this.playerRenderX) * lerpFactor;
+      this.playerRenderY += (player.y - this.playerRenderY) * lerpFactor;
+      // Snap when very close
+      if (Math.abs(player.x - this.playerRenderX) < 0.01) this.playerRenderX = player.x;
+      if (Math.abs(player.y - this.playerRenderY) < 0.01) this.playerRenderY = player.y;
+    }
+
+    // Update enemy smooth render positions
+    const seenEnemyIds = new Set<string>();
+    floor.enemies.forEach(enemy => {
+      seenEnemyIds.add(enemy.id);
+      const existing = this.enemyRenderPositions.get(enemy.id);
+      if (!existing) {
+        this.enemyRenderPositions.set(enemy.id, { rx: enemy.x, ry: enemy.y });
+      } else {
+        const lf = Math.min(1, dt * this.MOVE_LERP_SPEED);
+        existing.rx += (enemy.x - existing.rx) * lf;
+        existing.ry += (enemy.y - existing.ry) * lf;
+        if (Math.abs(enemy.x - existing.rx) < 0.01) existing.rx = enemy.x;
+        if (Math.abs(enemy.y - existing.ry) < 0.01) existing.ry = enemy.y;
+      }
+    });
+    // Clean up dead enemies
+    for (const id of this.enemyRenderPositions.keys()) {
+      if (!seenEnemyIds.has(id)) this.enemyRenderPositions.delete(id);
+    }
+
+    this.targetCameraX = this.playerRenderX * this.tileSize + this.tileSize / 2 - width / 2;
+    this.targetCameraY = this.playerRenderY * this.tileSize + this.tileSize / 2 - height / 2;
 
     this.cameraX += (this.targetCameraX - this.cameraX) * Math.min(1, dt * 10);
     this.cameraY += (this.targetCameraY - this.cameraY) * Math.min(1, dt * 10);
@@ -178,8 +217,8 @@ export class DungeonRenderer {
     });
 
     // 2.5 Render Torchlight Radial Glow around player
-    const playerScreenX = player.x * this.tileSize + this.tileSize / 2;
-    const playerScreenY = player.y * this.tileSize + this.tileSize / 2;
+    const playerScreenX = this.playerRenderX * this.tileSize + this.tileSize / 2;
+    const playerScreenY = this.playerRenderY * this.tileSize + this.tileSize / 2;
 
     const flicker = Math.sin(now * 3) * 6 + Math.cos(now * 5) * 4;
     const torchRadius = Math.max(120, player.visionRange * this.tileSize * 0.85 + flicker);
@@ -201,11 +240,14 @@ export class DungeonRenderer {
     floor.enemies.forEach(enemy => {
       const tile = floor.tiles[enemy.y]?.[enemy.x];
       if (!tile || !tile.visible) return;
-      this.drawEnemy(enemy, now);
+      const rp = this.enemyRenderPositions.get(enemy.id);
+      const erx = rp ? rp.rx : enemy.x;
+      const ery = rp ? rp.ry : enemy.y;
+      this.drawEnemy(enemy, now, erx, ery);
     });
 
     // 4. Render Player
-    this.drawPlayer(player, now);
+    this.drawPlayer(player, now, this.playerRenderX, this.playerRenderY);
 
     // 5. Render Weapon Slash Arcs
     slashes.forEach(slash => {
@@ -476,10 +518,10 @@ export class DungeonRenderer {
     ctx.restore();
   }
 
-  private drawPlayer(player: Player, now: number) {
+  private drawPlayer(player: Player, now: number, renderX: number, renderY: number) {
     const { ctx, tileSize } = this;
-    const px = player.x * tileSize + tileSize / 2;
-    const py = player.y * tileSize + tileSize / 2;
+    const px = renderX * tileSize + tileSize / 2;
+    const py = renderY * tileSize + tileSize / 2;
 
     const isInvisible = player.statusEffects.some(s => s.type === 'invisibility');
     const bob = Math.sin(now * 4) * 2;
@@ -530,10 +572,10 @@ export class DungeonRenderer {
     ctx.restore();
   }
 
-  private drawEnemy(enemy: Enemy, now: number) {
+  private drawEnemy(enemy: Enemy, now: number, renderX: number, renderY: number) {
     const { ctx, tileSize } = this;
-    const ex = enemy.x * tileSize + tileSize / 2;
-    const ey = enemy.y * tileSize + tileSize / 2;
+    const ex = renderX * tileSize + tileSize / 2;
+    const ey = renderY * tileSize + tileSize / 2;
 
     const bob = Math.sin(now * 3 + enemy.x) * 2;
 
