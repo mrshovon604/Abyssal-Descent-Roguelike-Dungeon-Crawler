@@ -5,7 +5,7 @@
 
 import { DungeonFloor, DungeonTheme, Enemy, FloorEvent, MonsterArchetype, Room, Tile } from '../types/game';
 import { generateMerchantStock } from '../items/itemDatabase';
-import { getDifficultyScale, getDungeonById, DUNGEON_THEMES as LIST_THEMES } from './dungeonList';
+import { getDifficultyScale, getDungeonById } from './dungeonList';
 
 export const DUNGEON_THEMES: Record<string, DungeonTheme> = {
   catacombs: {
