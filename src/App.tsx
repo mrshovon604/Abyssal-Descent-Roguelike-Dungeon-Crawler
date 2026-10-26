@@ -1467,6 +1467,15 @@ export default function App() {
         <TitleScreen onStartGame={handleStartGame} onContinueGame={handleContinueGame} />
       )}
 
+      {/* Dungeon Selection Screen */}
+      {screen === 'dungeon_select' && (
+        <DungeonSelectScreen
+          onSelectDungeon={handleBeginDungeon}
+          onBack={() => setScreen('title')}
+          highestCleared={highestDungeonCleared}
+        />
+      )}
+
       {/* Main Game Canvas (always mounted for zero-glitch state preservation) */}
       <canvas
         ref={canvasRef}
