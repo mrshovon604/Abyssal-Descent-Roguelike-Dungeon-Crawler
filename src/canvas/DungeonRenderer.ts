@@ -49,6 +49,13 @@ export class DungeonRenderer {
     this.screenShake = Math.max(this.screenShake, amount);
   }
 
+  /** Call when changing floors or teleporting so positions snap instantly. */
+  public resetPositions() {
+    this.playerRenderX = -1;
+    this.playerRenderY = -1;
+    this.enemyRenderPositions.clear();
+  }
+
   public triggerHitFlash() {
     if (!soundEngine.getSettings().screenShake) return;
     this.hitFlashTimer = 0.08;
