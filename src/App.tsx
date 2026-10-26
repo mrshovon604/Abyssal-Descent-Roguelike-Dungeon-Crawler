@@ -223,8 +223,18 @@ export default function App() {
   // Initialize new game run
   const handleStartGame = useCallback(
     (startingClass: 'warrior' | 'mage' | 'rogue') => {
+      selectedClassRef.current = startingClass;
+      setScreen('dungeon_select');
+    },
+    []
+  );
+
+  // Actually begin the dungeon after selection
+  const handleBeginDungeon = useCallback(
+    (dungeonId: number) => {
+      const startingClass = selectedClassRef.current;
       const starter = createStarterEquipment();
-      const newFloor = generateDungeonFloor(1);
+      const newFloor = generateDungeonFloor(1, dungeonId);
 
       const initialSkills: string[] = [];
       if (startingClass === 'warrior') {
@@ -271,10 +281,12 @@ export default function App() {
       playerRef.current = newPlayer;
       slashesRef.current = [];
       projectilesRef.current = [];
+      setCurrentDungeonId(dungeonId);
       setTurnNumber(1);
       setMonstersKilled(0);
       combatLogRef.current = [];
       setCombatLogList([]);
+      if (rendererRef.current) rendererRef.current.resetPositions();
 
       logCombat('You descend into the depths of the Forgotten Catacombs...', 'system');
       if (newFloor.floorEvent.type !== 'none') {
