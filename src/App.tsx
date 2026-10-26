@@ -312,10 +312,14 @@ export default function App() {
   const handleContinueGame = useCallback(
     (saved: SavedRunState) => {
       floorRef.current = saved.floor;
+      // Backward compat: old saves may not have dungeonId; default to dungeon 1
+      if (!floorRef.current.dungeonId) {
+        floorRef.current.dungeonId = 1;
+      }
       playerRef.current = saved.player;
       slashesRef.current = [];
       projectilesRef.current = [];
-      setCurrentDungeonId(saved.dungeonId || 1);
+      setCurrentDungeonId(floorRef.current.dungeonId);
       setTurnNumber(saved.turnNumber || 1);
       setMonstersKilled(saved.monstersKilled || 0);
       combatLogRef.current = saved.combatLog || [];
