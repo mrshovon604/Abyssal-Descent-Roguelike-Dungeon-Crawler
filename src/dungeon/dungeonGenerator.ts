@@ -5,6 +5,7 @@
 
 import { DungeonFloor, DungeonTheme, Enemy, FloorEvent, MonsterArchetype, Room, Tile } from '../types/game';
 import { generateMerchantStock } from '../items/itemDatabase';
+import { getDifficultyScale, getDungeonById } from './dungeonList';
 
 export const DUNGEON_THEMES: Record<string, DungeonTheme> = {
   catacombs: {
@@ -93,17 +94,21 @@ export function rollFloorEvent(floorNumber: number): FloorEvent {
   return FLOOR_EVENTS.none;
 }
 
-export function getThemeForFloor(floor: number): DungeonTheme {
+export function getThemeForFloor(floor: number, dungeonId: number = 1): DungeonTheme {
+  if (dungeonId > 1) {
+    const def = getDungeonById(dungeonId);
+    return DUNGEON_THEMES[def.themeKey] || DUNGEON_THEMES.catacombs;
+  }
   if (floor >= 10) return DUNGEON_THEMES.abyss;
   if (floor >= 7) return DUNGEON_THEMES.inferno;
   if (floor >= 4) return DUNGEON_THEMES.sunken;
   return DUNGEON_THEMES.catacombs;
 }
 
-export function generateDungeonFloor(floorNumber: number): DungeonFloor {
+export function generateDungeonFloor(floorNumber: number, dungeonId: number = 1): DungeonFloor {
   const width = 44;
   const height = 44;
-  const theme = getThemeForFloor(floorNumber);
+  const theme = getThemeForFloor(floorNumber, dungeonId);
   const floorEvent = rollFloorEvent(floorNumber);
 
   // Initialize tile grid filled with walls
@@ -274,11 +279,11 @@ export function generateDungeonFloor(floorNumber: number): DungeonFloor {
   const isFinalFloor = floorNumber >= 10;
 
   if (isFinalFloor) {
-    enemies.push(createBoss(endRoom.centerX, endRoom.centerY - 1, floorNumber));
-    enemies.push(createEnemy('shadow_demon', endRoom.centerX - 2, endRoom.centerY + 1, floorNumber, floorEvent));
-    enemies.push(createEnemy('shadow_demon', endRoom.centerX + 2, endRoom.centerY + 1, floorNumber, floorEvent));
+    enemies.push(createBoss(endRoom.centerX, endRoom.centerY - 1, floorNumber, dungeonId));
+    enemies.push(createEnemy('shadow_demon', endRoom.centerX - 2, endRoom.centerY + 1, floorNumber, floorEvent, dungeonId));
+    enemies.push(createEnemy('shadow_demon', endRoom.centerX + 2, endRoom.centerY + 1, floorNumber, floorEvent, dungeonId));
   } else if (floorNumber % 3 === 0) {
-    enemies.push(createBoss(endRoom.centerX, endRoom.centerY, floorNumber));
+    enemies.push(createBoss(endRoom.centerX, endRoom.centerY, floorNumber, dungeonId));
   }
 
   // Standard monsters across rooms
@@ -290,12 +295,13 @@ export function generateDungeonFloor(floorNumber: number): DungeonFloor {
       const ey = room.y + Math.floor(Math.random() * Math.max(1, room.height - 2)) + 1;
       if (tiles[ey][ex].type === 'floor' && !enemies.some(e => e.x === ex && e.y === ey)) {
         const archetype = pickMonsterArchetype(floorNumber);
-        enemies.push(createEnemy(archetype, ex, ey, floorNumber, floorEvent));
+        enemies.push(createEnemy(archetype, ex, ey, floorNumber, floorEvent, dungeonId));
       }
     }
   });
 
   return {
+    dungeonId,
     floorNumber,
     width,
     height,
@@ -375,9 +381,11 @@ export function createEnemy(
   x: number,
   y: number,
   floor: number,
-  floorEvent?: FloorEvent
+  floorEvent?: FloorEvent,
+  dungeonId: number = 1
 ): Enemy {
-  const scale = 1 + (floor - 1) * 0.25;
+  const baseScale = 1 + (floor - 1) * 0.25;
+  const scale = baseScale * getDifficultyScale(dungeonId, floor);
   const atkMult = floorEvent?.type === 'blood_moon' ? 1.15 : 1.0;
   const xpMult = floorEvent?.type === 'blood_moon' ? 1.35 : 1.0;
   const id = `enemy_${archetype}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
@@ -557,20 +565,23 @@ export function createEnemy(
   }
 }
 
-export function createBoss(x: number, y: number, floor: number): Enemy {
+export function createBoss(x: number, y: number, floor: number, dungeonId: number = 1): Enemy {
   const id = `boss_floor_${floor}_${Date.now()}`;
+  const ds = getDifficultyScale(dungeonId, floor);
+  const dungeonDef = getDungeonById(dungeonId);
   if (floor >= 10) {
+    const bossName = dungeonDef.bossName || 'Malakor, Abyssal Lord';
     return {
       id,
-      name: 'Malakor, Abyssal Lord',
+      name: bossName,
       archetype: 'boss',
       x,
       y,
-      hp: 420,
-      maxHp: 420,
-      attack: 38,
-      defense: 16,
-      xpReward: 1000,
+      hp: Math.round(420 * ds),
+      maxHp: Math.round(420 * ds),
+      attack: Math.round(38 * ds),
+      defense: Math.round(16 * ds),
+      xpReward: Math.round(1000 * ds),
       color: '#f43f5e',
       symbol: '👑',
       isBoss: true,
@@ -586,11 +597,11 @@ export function createBoss(x: number, y: number, floor: number): Enemy {
       archetype: 'boss',
       x,
       y,
-      hp: 240,
-      maxHp: 240,
-      attack: 28,
-      defense: 10,
-      xpReward: 450,
+      hp: Math.round(240 * ds),
+      maxHp: Math.round(240 * ds),
+      attack: Math.round(28 * ds),
+      defense: Math.round(10 * ds),
+      xpReward: Math.round(450 * ds),
       color: '#06b6d4',
       symbol: '🐉',
       isBoss: true,
@@ -606,11 +617,11 @@ export function createBoss(x: number, y: number, floor: number): Enemy {
       archetype: 'boss',
       x,
       y,
-      hp: 140,
-      maxHp: 140,
-      attack: 19,
-      defense: 7,
-      xpReward: 220,
+      hp: Math.round(140 * ds),
+      maxHp: Math.round(140 * ds),
+      attack: Math.round(19 * ds),
+      defense: Math.round(7 * ds),
+      xpReward: Math.round(220 * ds),
       color: '#eab308',
       symbol: '💀',
       isBoss: true,

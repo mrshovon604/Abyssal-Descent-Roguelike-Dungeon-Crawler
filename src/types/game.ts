@@ -227,6 +227,7 @@ export interface FloorEvent {
 }
 
 export interface DungeonFloor {
+  dungeonId: number;
   floorNumber: number;
   width: number;
   height: number;
@@ -322,6 +323,7 @@ export interface RunHistoryRecord {
 export interface SavedRunState {
   version: number;
   savedAt: string;
+  dungeonId: number;
   floor: DungeonFloor;
   player: Player;
   turnNumber: number;
@@ -329,4 +331,4 @@ export interface SavedRunState {
   combatLog: CombatLogEntry[];
 }
 
-export type GameScreen = 'title' | 'playing' | 'paused' | 'game_over' | 'victory';
+export type GameScreen = 'title' | 'dungeon_select' | 'playing' | 'paused' | 'game_over' | 'victory';

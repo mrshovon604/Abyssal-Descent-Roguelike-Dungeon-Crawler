@@ -12,6 +12,7 @@ interface VictoryModalProps {
   turnNumber: number;
   monstersKilled: number;
   onRestart: () => void;
+  onReturnToSelect?: () => void;
 }
 
 export const VictoryModal: React.FC<VictoryModalProps> = ({
@@ -19,6 +20,7 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
   turnNumber,
   monstersKilled,
   onRestart,
+  onReturnToSelect,
 }) => {
   useEffect(() => {
     soundEngine.playLevelUp();
@@ -87,6 +89,18 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
         >
           Embark on a New Legend
         </button>
+
+        {onReturnToSelect && (
+          <button
+            onClick={() => {
+              soundEngine.haptic(25);
+              onReturnToSelect();
+            }}
+            className="w-full mt-2 min-h-[44px] py-3 bg-stone-900 border border-stone-700 hover:border-amber-500/60 active:scale-95 text-stone-300 hover:text-amber-400 font-cinzel font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+          >
+            Choose Another Dungeon
+          </button>
+        )}
       </div>
     </div>
   );

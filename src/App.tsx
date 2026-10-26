@@ -18,6 +18,7 @@ import {
   SlashEffect,
 } from './types/game';
 import { generateDungeonFloor, updateFieldOfView } from './dungeon/dungeonGenerator';
+import { getDungeonById } from './dungeon/dungeonList';
 import { createStarterEquipment, generateRandomItem } from './items/itemDatabase';
 import { SKILL_TREE_NODES, getActiveSkills } from './skills/skillTreeData';
 import {
@@ -39,6 +40,7 @@ import { VictoryModal } from './components/VictoryModal';
 import { PauseModal } from './components/PauseModal';
 import { SettingsModal } from './components/SettingsModal';
 import { OfflineIndicator } from './components/PWAInstallButton';
+import { DungeonSelectScreen } from './components/DungeonSelectScreen';
 
 export default function App() {
   const [screen, setScreen] = useState<GameScreen>('title');
@@ -49,6 +51,13 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [turnNumber, setTurnNumber] = useState(1);
   const [monstersKilled, setMonstersKilled] = useState(0);
+  const [currentDungeonId, setCurrentDungeonId] = useState(1);
+  const [highestDungeonCleared, setHighestDungeonCleared] = useState(() => {
+    try {
+      return parseInt(localStorage.getItem('abyssal_highest_dungeon') || '0', 10);
+    } catch { return 0; }
+  });
+  const selectedClassRef = useRef<'warrior' | 'mage' | 'rogue'>('warrior');
   const [causeOfDeath, setCauseOfDeath] = useState('Slain in the Abyss');
   const [floorBanner, setFloorBanner] = useState<{
     title: string;
@@ -85,6 +94,7 @@ export default function App() {
         const snapshot: SavedRunState = {
           version: 1,
           savedAt: new Date().toISOString(),
+          dungeonId: currentDungeonId,
           floor: floorRef.current,
           player: playerRef.current,
           turnNumber: nextTurn ?? turnNumber,
@@ -94,7 +104,7 @@ export default function App() {
         localStorage.setItem('abyssal_saved_run', JSON.stringify(snapshot));
       } catch {}
     },
-    [turnNumber, monstersKilled]
+    [turnNumber, monstersKilled, currentDungeonId]
   );
 
   const clearSavedRun = useCallback(() => {
@@ -107,8 +117,9 @@ export default function App() {
     if (bannerTimeoutRef.current) {
       window.clearTimeout(bannerTimeoutRef.current);
     }
+    const dungeonName = floor.dungeonId > 1 ? ` — Dungeon ${floor.dungeonId}` : '';
     setFloorBanner({
-      title: `Depth ${floor.floorNumber}F · ${floor.theme.name}`,
+      title: `Depth ${floor.floorNumber}F · ${floor.theme.name}${dungeonName}`,
       eventIcon: floor.floorEvent.icon,
       eventName: floor.floorEvent.name,
       eventDesc: floor.floorEvent.description,
@@ -214,8 +225,18 @@ export default function App() {
   // Initialize new game run
   const handleStartGame = useCallback(
     (startingClass: 'warrior' | 'mage' | 'rogue') => {
+      selectedClassRef.current = startingClass;
+      setScreen('dungeon_select');
+    },
+    []
+  );
+
+  // Actually begin the dungeon after selection
+  const handleBeginDungeon = useCallback(
+    (dungeonId: number) => {
+      const startingClass = selectedClassRef.current;
       const starter = createStarterEquipment();
-      const newFloor = generateDungeonFloor(1);
+      const newFloor = generateDungeonFloor(1, dungeonId);
 
       const initialSkills: string[] = [];
       if (startingClass === 'warrior') {
@@ -262,12 +283,14 @@ export default function App() {
       playerRef.current = newPlayer;
       slashesRef.current = [];
       projectilesRef.current = [];
+      setCurrentDungeonId(dungeonId);
       setTurnNumber(1);
       setMonstersKilled(0);
       combatLogRef.current = [];
       setCombatLogList([]);
+      if (rendererRef.current) rendererRef.current.resetPositions();
 
-      logCombat('You descend into the depths of the Forgotten Catacombs...', 'system');
+      logCombat(`You descend into ${getDungeonById(dungeonId).name}...`, 'system');
       if (newFloor.floorEvent.type !== 'none') {
         logCombat(
           `${newFloor.floorEvent.icon} Floor Event — ${newFloor.floorEvent.name}: ${newFloor.floorEvent.description}`,
@@ -290,13 +313,19 @@ export default function App() {
   const handleContinueGame = useCallback(
     (saved: SavedRunState) => {
       floorRef.current = saved.floor;
+      // Backward compat: old saves may not have dungeonId; default to dungeon 1
+      if (!floorRef.current.dungeonId) {
+        floorRef.current.dungeonId = 1;
+      }
       playerRef.current = saved.player;
       slashesRef.current = [];
       projectilesRef.current = [];
+      setCurrentDungeonId(floorRef.current.dungeonId);
       setTurnNumber(saved.turnNumber || 1);
       setMonstersKilled(saved.monstersKilled || 0);
       combatLogRef.current = saved.combatLog || [];
       setCombatLogList([...combatLogRef.current]);
+      if (rendererRef.current) rendererRef.current.resetPositions();
 
       updateFieldOfView(saved.floor, saved.player.x, saved.player.y, saved.player.visionRange);
       setScreen('playing');
@@ -335,14 +364,28 @@ export default function App() {
   const handleDescendFloor = useCallback(() => {
     if (!floorRef.current || !playerRef.current) return;
     const nextFloorNum = floorRef.current.floorNumber + 1;
+    const dungeonId = floorRef.current.dungeonId || currentDungeonId;
+
+    // Victory: cleared all 10 floors of this dungeon
+    if (nextFloorNum > 10) {
+      clearSavedRun();
+      // Track highest dungeon cleared
+      if (dungeonId > highestDungeonCleared) {
+        setHighestDungeonCleared(dungeonId);
+        try { localStorage.setItem('abyssal_highest_dungeon', String(dungeonId)); } catch {}
+      }
+      setScreen('victory');
+      return;
+    }
 
     soundEngine.playStairs();
-    const newFloor = generateDungeonFloor(nextFloorNum);
+    const newFloor = generateDungeonFloor(nextFloorNum, dungeonId);
     floorRef.current = newFloor;
 
     playerRef.current.x = newFloor.stairsUpPos.x;
     playerRef.current.y = newFloor.stairsUpPos.y;
     updateFieldOfView(newFloor, playerRef.current.x, playerRef.current.y, playerRef.current.visionRange);
+    if (rendererRef.current) rendererRef.current.resetPositions();
 
     addFloatingText(`DEPTH ${nextFloorNum} REACHED`, playerRef.current.x, playerRef.current.y - 1, '#f59e0b');
     logCombat(`You descended to Depth ${nextFloorNum} · ${newFloor.theme.name}.`, 'level_up');
@@ -357,7 +400,7 @@ export default function App() {
     showFloorArrivalBanner(newFloor);
     saveCurrentRun();
     triggerHud();
-  }, [addFloatingText, logCombat, showFloorArrivalBanner, saveCurrentRun]);
+  }, [addFloatingText, logCombat, showFloorArrivalBanner, saveCurrentRun, clearSavedRun, currentDungeonId, highestDungeonCleared]);
 
   // Complete a turn and advance game state
   const advanceTurn = useCallback(() => {
@@ -488,6 +531,11 @@ export default function App() {
           // Check if Boss killed on floor 10
           if (enemy.archetype === 'boss' && floor.floorNumber >= 10) {
             clearSavedRun();
+            const dId = floor.dungeonId || currentDungeonId;
+            if (dId > highestDungeonCleared) {
+              setHighestDungeonCleared(dId);
+              try { localStorage.setItem('abyssal_highest_dungeon', String(dId)); } catch {}
+            }
             setScreen('victory');
             return false;
           }
@@ -633,6 +681,9 @@ export default function App() {
       spawnSlash,
       handleDescendFloor,
       advanceTurn,
+      clearSavedRun,
+      currentDungeonId,
+      highestDungeonCleared,
     ]
   );
 
@@ -703,6 +754,11 @@ export default function App() {
 
         if (targetEnemy.archetype === 'boss' && floor.floorNumber >= 10) {
           clearSavedRun();
+          const dId = floor.dungeonId || currentDungeonId;
+          if (dId > highestDungeonCleared) {
+            setHighestDungeonCleared(dId);
+            try { localStorage.setItem('abyssal_highest_dungeon', String(dId)); } catch {}
+          }
           setScreen('victory');
           return;
         }
@@ -760,7 +816,7 @@ export default function App() {
     spawnParticles(targetX, targetY, '#f59e0b', 5);
     logCombat('You swing your weapon into the gloom.', 'system');
     advanceTurn();
-  }, [screen, addFloatingText, logCombat, spawnParticles, spawnSlash, advanceTurn, handlePlayerMove]);
+  }, [screen, addFloatingText, logCombat, spawnParticles, spawnSlash, advanceTurn, handlePlayerMove, clearSavedRun, currentDungeonId, highestDungeonCleared]);
 
   // Cast active skill
   const handleExecuteSkill = useCallback(
@@ -1420,6 +1476,15 @@ export default function App() {
         <TitleScreen onStartGame={handleStartGame} onContinueGame={handleContinueGame} />
       )}
 
+      {/* Dungeon Selection Screen */}
+      {screen === 'dungeon_select' && (
+        <DungeonSelectScreen
+          onSelectDungeon={handleBeginDungeon}
+          onBack={() => setScreen('title')}
+          highestCleared={highestDungeonCleared}
+        />
+      )}
+
       {/* Main Game Canvas (always mounted for zero-glitch state preservation) */}
       <canvas
         ref={canvasRef}
@@ -1428,7 +1493,7 @@ export default function App() {
         onTouchStart={handleCanvasTouchStart}
         onTouchMove={handleCanvasTouchMove}
         onTouchEnd={handleCanvasTouchEnd}
-        className={`absolute inset-0 cursor-crosshair touch-none ${screen !== 'title' ? 'block' : 'hidden'}`}
+        className={`absolute inset-0 cursor-crosshair touch-none ${screen === 'playing' || screen === 'paused' || screen === 'game_over' || screen === 'victory' ? 'block' : 'hidden'}`}
       />
 
       {/* Floor Arrival & Special Event Atmospheric Banner */}
@@ -1546,6 +1611,7 @@ export default function App() {
           turnNumber={turnNumber}
           monstersKilled={monstersKilled}
           onRestart={() => handleStartGame('warrior')}
+          onReturnToSelect={() => setScreen('dungeon_select')}
         />
       )}
     </div>
