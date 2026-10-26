@@ -358,14 +358,28 @@ export default function App() {
   const handleDescendFloor = useCallback(() => {
     if (!floorRef.current || !playerRef.current) return;
     const nextFloorNum = floorRef.current.floorNumber + 1;
+    const dungeonId = floorRef.current.dungeonId || currentDungeonId;
+
+    // Victory: cleared all 10 floors of this dungeon
+    if (nextFloorNum > 10) {
+      clearSavedRun();
+      // Track highest dungeon cleared
+      if (dungeonId > highestDungeonCleared) {
+        setHighestDungeonCleared(dungeonId);
+        try { localStorage.setItem('abyssal_highest_dungeon', String(dungeonId)); } catch {}
+      }
+      setScreen('victory');
+      return;
+    }
 
     soundEngine.playStairs();
-    const newFloor = generateDungeonFloor(nextFloorNum);
+    const newFloor = generateDungeonFloor(nextFloorNum, dungeonId);
     floorRef.current = newFloor;
 
     playerRef.current.x = newFloor.stairsUpPos.x;
     playerRef.current.y = newFloor.stairsUpPos.y;
     updateFieldOfView(newFloor, playerRef.current.x, playerRef.current.y, playerRef.current.visionRange);
+    if (rendererRef.current) rendererRef.current.resetPositions();
 
     addFloatingText(`DEPTH ${nextFloorNum} REACHED`, playerRef.current.x, playerRef.current.y - 1, '#f59e0b');
     logCombat(`You descended to Depth ${nextFloorNum} · ${newFloor.theme.name}.`, 'level_up');
