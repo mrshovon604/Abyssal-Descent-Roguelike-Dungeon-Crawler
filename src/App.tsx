@@ -18,6 +18,7 @@ import {
   SlashEffect,
 } from './types/game';
 import { generateDungeonFloor, updateFieldOfView } from './dungeon/dungeonGenerator';
+import { getDungeonById } from './dungeon/dungeonList';
 import { createStarterEquipment, generateRandomItem } from './items/itemDatabase';
 import { SKILL_TREE_NODES, getActiveSkills } from './skills/skillTreeData';
 import {
