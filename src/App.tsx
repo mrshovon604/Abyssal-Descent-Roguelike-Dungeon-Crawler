@@ -394,7 +394,7 @@ export default function App() {
     showFloorArrivalBanner(newFloor);
     saveCurrentRun();
     triggerHud();
-  }, [addFloatingText, logCombat, showFloorArrivalBanner, saveCurrentRun]);
+  }, [addFloatingText, logCombat, showFloorArrivalBanner, saveCurrentRun, clearSavedRun, currentDungeonId, highestDungeonCleared]);
 
   // Complete a turn and advance game state
   const advanceTurn = useCallback(() => {
