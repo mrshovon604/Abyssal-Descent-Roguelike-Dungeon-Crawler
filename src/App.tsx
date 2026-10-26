@@ -675,6 +675,9 @@ export default function App() {
       spawnSlash,
       handleDescendFloor,
       advanceTurn,
+      clearSavedRun,
+      currentDungeonId,
+      highestDungeonCleared,
     ]
   );
 
